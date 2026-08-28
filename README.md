@@ -5,8 +5,14 @@ FastAPI + Celery + PostgreSQL + Redis 项目骨架，包含多租户任务状态
 ## 启动
 
 1. 复制 `.env.example` 为 `.env`，至少修改 `JWT_SECRET` 和管理员密码。
-2. 运行 `docker compose up --build`。
+2. 运行 `docker compose up --build --detach --wait`。
 3. 打开 <http://localhost:8000/docs>；`GET /health` 返回 `{"status":"healthy"}` 时所有依赖均可用。
+
+若 Windows 的 Docker 配置启用了 Bake，且仓库路径包含中文，使用下面的一键兼容命令避开 BuildKit 的路径编码问题：
+
+```powershell
+$env:DOCKER_BUILDKIT = "0"; docker compose up --build --detach --wait
+```
 
 Compose 会运行 Alembic 数据库迁移，并创建 `.env` 中配置的初始租户管理员。默认租户 ID 为 `00000000-0000-0000-0000-000000000001`。
 
