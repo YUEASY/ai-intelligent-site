@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from app.database import TenantSession
 from app.models import ShopifyOAuthState, ShopifyStore
+from app.shopify.types import ShopifyStoreStatus
 
 SHOPIFY_OAUTH_SCOPES = ("write_products", "write_content")
 _SHOP_DOMAIN = re.compile(
@@ -219,7 +220,7 @@ class SqlAlchemyShopifyInstallations:
                     granted_scopes=sorted(granted_scopes),
                 )
                 session.add(store)
-            store.status = "connected"
+            store.status = ShopifyStoreStatus.CONNECTED.value
             store.encrypted_access_token = token.ciphertext
             store.access_token_nonce = token.nonce
             store.granted_scopes = sorted(granted_scopes)

@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.database import TenantSession
 from app.models import ShopifyStore, ShopifyWebhookEvent
+from app.shopify.types import ShopifyStoreStatus, WebhookEventStatus
 
 
 class InvalidWebhookSignature(ValueError):
@@ -90,7 +91,7 @@ class SqlAlchemyWebhookEvents:
             store = session.scalar(
                 select(ShopifyStore).where(
                     ShopifyStore.shop_domain == webhook.shop_domain,
-                    ShopifyStore.status == "connected",
+                    ShopifyStore.status == ShopifyStoreStatus.CONNECTED.value,
                 )
             )
             if store is None:
@@ -106,7 +107,7 @@ class SqlAlchemyWebhookEvents:
                     api_version=webhook.api_version,
                     raw_payload=webhook.raw_payload,
                     payload=webhook.payload,
-                    status="received",
+                    status=WebhookEventStatus.RECEIVED.value,
                 )
             )
             try:
@@ -130,7 +131,7 @@ class SqlAlchemyWebhookEvents:
             )
             if event is None:
                 return
-            event.status = "dead_letter"
+            event.status = WebhookEventStatus.DEAD_LETTER.value
             event.error_reason = reason
             session.commit()
 

@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
+from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse
 
 from app.config import Settings, get_settings
@@ -22,6 +23,7 @@ from app.shopify.oauth import (
     SqlAlchemyShopifyInstallations,
     TokenCipher,
 )
+from app.shopify.types import ShopifyStoreStatus
 from app.shopify.webhook_service import (
     InvalidWebhookReplay,
     ShopifyWebhookService,
@@ -171,7 +173,7 @@ def shopify_oauth_callback(
         ) from exc
     return ShopifyStoreRead(
         shop_domain=connected.shop_domain,
-        status="connected",
+        status=ShopifyStoreStatus.CONNECTED.value,
         granted_scopes=sorted(connected.granted_scopes),
     )
 
@@ -203,10 +205,12 @@ async def receive_shopify_webhook(
     ],
 ) -> JSONResponse:
     adapter = adapter_factory(tenant_id)
+    body = await request.body()
     try:
-        receipt = adapter.receive(
+        receipt = await run_in_threadpool(
+            adapter.receive,
             tenant_id=tenant_id,
-            body=await request.body(),
+            body=body,
             headers=request.headers,
         )
     except InvalidWebhookSignature as exc:

@@ -17,6 +17,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base, TenantOwned
 from app.domain.task_state import TaskState
+from app.shopify.types import ShopifyStoreStatus, WebhookEventStatus
 
 
 class Timestamped:
@@ -94,7 +95,7 @@ class ShopifyStore(TenantOwned, Timestamped, Base):
     __tablename__ = "shopify_stores"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('connected', 'disconnected', 'error')",
+            f"status IN {tuple(status.value for status in ShopifyStoreStatus)!r}",
             name="ck_shopify_stores_status",
         ),
         UniqueConstraint("shop_domain", name="uq_shopify_stores_shop_domain"),
@@ -104,7 +105,10 @@ class ShopifyStore(TenantOwned, Timestamped, Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     shop_domain: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(
-        String(32), default="connected", nullable=False, index=True
+        String(32),
+        default=ShopifyStoreStatus.CONNECTED.value,
+        nullable=False,
+        index=True,
     )
     encrypted_access_token: Mapped[bytes | None] = mapped_column(
         LargeBinary, nullable=True
@@ -141,7 +145,7 @@ class ShopifyWebhookEvent(TenantOwned, Base):
     __tablename__ = "shopify_webhook_events"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('received', 'processed', 'dead_letter')",
+            f"status IN {tuple(status.value for status in WebhookEventStatus)!r}",
             name="ck_shopify_webhook_events_status",
         ),
         ForeignKeyConstraint(
@@ -162,7 +166,10 @@ class ShopifyWebhookEvent(TenantOwned, Base):
     raw_payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
     status: Mapped[str] = mapped_column(
-        String(32), default="received", nullable=False, index=True
+        String(32),
+        default=WebhookEventStatus.RECEIVED.value,
+        nullable=False,
+        index=True,
     )
     error_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     replay_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

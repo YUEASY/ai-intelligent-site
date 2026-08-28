@@ -8,6 +8,7 @@ from app.database import tenant_session_scope
 from app.domain.risk import RiskLevel
 from app.domain.task_state import InvalidTaskTransition, TaskState
 from app.services import TaskNotFoundError, TaskService, completion_state
+from app.shopify.types import WebhookEventStatus
 from app.shopify.webhook_service import ShopifyWebhookService, WebhookEventNotFound
 
 
@@ -82,7 +83,7 @@ def process_shopify_webhook(event_id: str, tenant_id: str) -> str:
         parsed_event_id = UUID(event_id)
         parsed_tenant_id = UUID(tenant_id)
     except ValueError:
-        return "dead_letter"
+        return WebhookEventStatus.DEAD_LETTER.value
 
     try:
         with tenant_session_scope(parsed_tenant_id) as session:
@@ -95,5 +96,5 @@ def process_shopify_webhook(event_id: str, tenant_id: str) -> str:
                     f"Webhook processing failed: {type(exc).__name__}: {exc}",
                 )
             except WebhookEventNotFound:
-                return "dead_letter"
-        return "dead_letter"
+                return WebhookEventStatus.DEAD_LETTER.value
+        return WebhookEventStatus.DEAD_LETTER.value
