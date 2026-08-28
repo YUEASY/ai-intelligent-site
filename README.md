@@ -4,7 +4,7 @@ FastAPI + Celery + PostgreSQL + Redis 项目骨架，包含多租户任务状态
 
 ## 启动
 
-1. 复制 `.env.example` 为 `.env`，至少修改 `JWT_SECRET` 和管理员密码。
+1. 复制 `.env.example` 为 `.env`，修改 `JWT_SECRET`、管理员密码与 Shopify 配置。`SHOPIFY_TOKEN_ENCRYPTION_KEY` 必须是 Base64 编码的 32 字节随机密钥。
 2. 运行 `docker compose up --build --detach --wait`。
 3. 打开 <http://localhost:8000/docs>；`GET /health` 返回 `{"status":"healthy"}` 时所有依赖均可用。
 
@@ -24,6 +24,12 @@ Compose 会运行 Alembic 数据库迁移，并创建 `.env` 中配置的初始�
 - `GET /api/v1/tasks`：仅列出当前租户的任务。
 - `POST /api/v1/tasks/{task_id}/transitions`：按状态机推进审核、发布或回滚。
 - `GET /api/v1/tasks/{task_id}/audit-log`：查看每次状态迁移的操作者、时间和前后状态。
+- `GET /api/v1/shopify/oauth/authorize?shop_domain=...`：生成仅含商品与内容写权限的 Shopify 授权 URL。
+- `GET /api/v1/shopify/oauth/callback`：Shopify OAuth 回调；Token 仅以 AES-GCM 密文落库。
+- `GET /api/v1/shopify/stores`：查看当前商户的店铺连接状态。
+- `POST /api/v1/shopify/webhooks/ingress/{tenant_id}`：Shopify Webhook 接收端点，先 HMAC 验签、再按事件 ID 幂等入队。
+- `GET /api/v1/shopify/webhooks/dead-letters`：查看当前商户的死信事件。
+- `POST /api/v1/shopify/webhooks/{event_id}/replay`：重放死信事件。
 
 创建 SEO 字段更新任务的请求示例：
 

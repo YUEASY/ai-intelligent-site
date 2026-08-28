@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.14,<2",
   "celery[redis]>=5.4,<6",
+  "cryptography>=44,<47",
   "fastapi>=0.115,<1",
   "psycopg[binary]>=3.2,<4",
   "pydantic-settings>=2.6,<3",
@@ -22,6 +23,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "httpx2>=2,<3",
   "mypy>=1.13,<2",
   "pytest>=8,<10",
   "ruff>=0.8,<1",

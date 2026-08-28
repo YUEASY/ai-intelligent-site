@@ -1,0 +1,1 @@
+"""Shopify platform adapter."""

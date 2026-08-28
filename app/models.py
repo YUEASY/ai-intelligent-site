@@ -6,6 +6,8 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKeyConstraint,
+    Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -85,4 +87,88 @@ class TaskAuditLog(TenantOwned, Base):
     to_status: Mapped[str] = mapped_column(String(32), nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ShopifyStore(TenantOwned, Timestamped, Base):
+    __tablename__ = "shopify_stores"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('connected', 'disconnected', 'error')",
+            name="ck_shopify_stores_status",
+        ),
+        UniqueConstraint("shop_domain", name="uq_shopify_stores_shop_domain"),
+        UniqueConstraint("tenant_id", "id", name="uq_shopify_stores_tenant_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    shop_domain: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), default="connected", nullable=False, index=True
+    )
+    encrypted_access_token: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True
+    )
+    access_token_nonce: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    granted_scopes: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    connected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    disconnected_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class ShopifyOAuthState(TenantOwned, Timestamped, Base):
+    __tablename__ = "shopify_oauth_states"
+    __table_args__ = (
+        UniqueConstraint("state_digest", name="uq_shopify_oauth_states_digest"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    shop_domain: Mapped[str] = mapped_column(String(255), nullable=False)
+    state_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    consumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class ShopifyWebhookEvent(TenantOwned, Base):
+    __tablename__ = "shopify_webhook_events"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('received', 'processed', 'dead_letter')",
+            name="ck_shopify_webhook_events_status",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "store_id"],
+            ["shopify_stores.tenant_id", "shopify_stores.id"],
+            ondelete="CASCADE",
+            name="fk_shopify_webhook_events_store",
+        ),
+        UniqueConstraint("webhook_id", name="uq_shopify_webhook_events_webhook_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    store_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
+    webhook_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    shop_domain: Mapped[str] = mapped_column(String(255), nullable=False)
+    topic: Mapped[str] = mapped_column(String(255), nullable=False)
+    api_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    raw_payload: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), default="received", nullable=False, index=True
+    )
+    error_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    replay_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )

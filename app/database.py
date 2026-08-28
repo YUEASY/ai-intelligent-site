@@ -73,7 +73,7 @@ def _enforce_tenant_writes(
 
 @contextmanager
 def tenant_session_scope(tenant_id: UUID) -> Iterator[TenantSession]:
-    session = TenantSession(bind=engine, expire_on_commit=False, tenant_id=tenant_id)
+    session = tenant_session(tenant_id)
     try:
         yield session
         session.commit()
@@ -82,6 +82,10 @@ def tenant_session_scope(tenant_id: UUID) -> Iterator[TenantSession]:
         raise
     finally:
         session.close()
+
+
+def tenant_session(tenant_id: UUID) -> TenantSession:
+    return TenantSession(bind=engine, expire_on_commit=False, tenant_id=tenant_id)
 
 
 def infrastructure_session() -> Generator[Session, None, None]:
