@@ -1,11 +1,12 @@
 from uuid import UUID
 
 from celery import Task as CeleryTask  # type: ignore[import-untyped]
+from sqlalchemy.exc import OperationalError
 
 from app.celery_app import celery_app
 from app.database import tenant_session_scope
+from app.domain.risk import RiskLevel
 from app.domain.task_state import InvalidTaskTransition, TaskState
-from app.schemas import RiskLevel
 from app.services import TaskNotFoundError, TaskService, completion_state
 
 
@@ -45,14 +46,26 @@ def _mark_failed(task_id: UUID, tenant_id: UUID, error: Exception) -> None:
     bind=True, max_retries=3, name="tasks.execute"
 )
 def execute_task(self: CeleryTask, task_id: str, tenant_id: str) -> str:
-    parsed_task_id = UUID(task_id)
-    parsed_tenant_id = UUID(tenant_id)
     try:
+        parsed_task_id = UUID(task_id)
+        parsed_tenant_id = UUID(tenant_id)
         return _run_workflow(parsed_task_id, parsed_tenant_id)
-    except DeterministicTaskError as exc:
+    except (ValueError, DeterministicTaskError) as exc:
+        try:
+            parsed_task_id = UUID(task_id)
+            parsed_tenant_id = UUID(tenant_id)
+        except ValueError:
+            return TaskState.FAILED.value
         _mark_failed(parsed_task_id, parsed_tenant_id, exc)
         return TaskState.FAILED.value
-    except RecoverableTaskError as exc:
+    except (
+        RecoverableTaskError,
+        OperationalError,
+        ConnectionError,
+        TimeoutError,
+    ) as exc:
+        parsed_task_id = UUID(task_id)
+        parsed_tenant_id = UUID(tenant_id)
         if self.request.retries >= 3:
             _mark_failed(parsed_task_id, parsed_tenant_id, exc)
             return TaskState.FAILED.value

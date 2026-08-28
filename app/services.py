@@ -3,9 +3,10 @@ from uuid import UUID
 from sqlalchemy import select
 
 from app.database import TenantSession
+from app.domain.risk import RiskLevel, grade_risk
 from app.domain.task_state import TaskState, transition
 from app.models import Task, TaskAuditLog
-from app.schemas import RiskLevel, TaskCreate
+from app.schemas import TaskCreate
 
 
 class TaskNotFoundError(LookupError):
@@ -18,10 +19,13 @@ class TaskService:
         self.actor = actor
 
     def create(self, command: TaskCreate) -> Task:
+        risk_level = grade_risk(command.operation_type, command.changed_fields)
         task = Task(
             tenant_id=self.session.tenant_id,
-            kind=command.kind,
-            risk_level=command.risk_level.value,
+            kind=command.kind.value,
+            operation_type=command.operation_type.value,
+            changed_fields=sorted(field.value for field in command.changed_fields),
+            risk_level=risk_level.value,
         )
         self.session.add(task)
         self.session.flush()

@@ -2,15 +2,20 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.domain.risk import (
+    OperationType,
+    ProductField,
+    RiskLevel,
+    grade_risk,
+)
 from app.domain.task_state import TaskState
 
 
-class RiskLevel(StrEnum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
+class TaskKind(StrEnum):
+    PRODUCT = "product"
+    SEO = "seo"
 
 
 class LoginRequest(BaseModel):
@@ -31,8 +36,16 @@ class AdminRead(BaseModel):
 
 
 class TaskCreate(BaseModel):
-    kind: str = Field(min_length=1, max_length=100)
-    risk_level: RiskLevel
+    model_config = ConfigDict(extra="forbid")
+
+    kind: TaskKind
+    operation_type: OperationType
+    changed_fields: set[ProductField] = Field(default_factory=set)
+
+    @model_validator(mode="after")
+    def validate_risk_input(self) -> "TaskCreate":
+        grade_risk(self.operation_type, self.changed_fields)
+        return self
 
 
 class TaskRead(BaseModel):
@@ -40,7 +53,9 @@ class TaskRead(BaseModel):
 
     id: UUID
     tenant_id: UUID
-    kind: str
+    kind: TaskKind
+    operation_type: OperationType
+    changed_fields: list[ProductField]
     risk_level: RiskLevel
     status: TaskState
     last_error: str | None
