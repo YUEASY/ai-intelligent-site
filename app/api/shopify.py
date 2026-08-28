@@ -23,7 +23,7 @@ from app.shopify.oauth import (
     SqlAlchemyShopifyInstallations,
     TokenCipher,
 )
-from app.shopify.types import ShopifyStoreStatus
+from app.shopify.types import ShopifyStoreStatus, WebhookEventStatus
 from app.shopify.webhook_service import (
     InvalidWebhookReplay,
     ShopifyWebhookService,
@@ -224,7 +224,7 @@ async def receive_shopify_webhook(
             status_code=status.HTTP_202_ACCEPTED,
             content={
                 "event_id": str(exc.event_id),
-                "status": "dead_letter",
+                "status": WebhookEventStatus.DEAD_LETTER.value,
             },
         )
 
