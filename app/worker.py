@@ -37,6 +37,9 @@ def _mark_failed(task_id: UUID, tenant_id: UUID, error: Exception) -> None:
     with tenant_session_scope(tenant_id) as session:
         service = TaskService(session, actor="system:celery")
         try:
+            task = service.get(task_id, for_update=True)
+            if TaskState(task.status) is TaskState.PENDING:
+                service.advance(task_id, TaskState.RUNNING)
             service.fail(task_id, str(error))
         except (InvalidTaskTransition, TaskNotFoundError):
             return
