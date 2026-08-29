@@ -43,6 +43,7 @@ function draft(
   title: string,
   riskLevel: ReviewDraft["risk_level"],
   createdAt: string,
+  status: ReviewDraft["status"] = "pending_review",
 ): ReviewDraft {
   return {
     id,
@@ -56,7 +57,7 @@ function draft(
     alt_text: {},
     seo_tags: [],
     risk_level: riskLevel,
-    status: "pending_review",
+    status,
     rejection_reason: null,
     created_at: createdAt,
     updated_at: createdAt,
@@ -162,6 +163,38 @@ describe("ReviewQueuePage", () => {
     );
   });
 
+  it("keeps approved drafts visible with a publish-only action", async () => {
+    mockedGetReviewQueue.mockResolvedValue([
+      draft(
+        "approved",
+        "Approved Product",
+        "medium",
+        "2024-01-01T00:00:00Z",
+        "approved",
+      ),
+    ]);
+
+    render(<ReviewQueuePage />);
+
+    await screen.findByText("Approved Product");
+    expect(screen.getByText("已通过")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /发\s*布/ })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /编\s*辑/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重生成" })).not.toBeInTheDocument();
+  });
+
+  it("does not offer publish before a draft has been approved", async () => {
+    mockedGetReviewQueue.mockResolvedValue([
+      draft("pending", "Pending Product", "high", "2024-01-01T00:00:00Z"),
+    ]);
+
+    render(<ReviewQueuePage />);
+
+    await screen.findByText("Pending Product");
+    expect(screen.queryByRole("button", { name: /发\s*布/ })).not.toBeInTheDocument();
+  });
+
   it("batch rejects selected drafts with a structured reason", async () => {
     mockedGetReviewQueue.mockResolvedValueOnce([
       draft("high", "High Product", "high", "2024-01-01T00:00:00Z"),
@@ -234,7 +267,13 @@ describe("ReviewQueuePage", () => {
 
   it("confirms before publishing a draft to Shopify", async () => {
     mockedGetReviewQueue.mockResolvedValue([
-      draft("high", "High Product", "high", "2024-01-01T00:00:00Z"),
+      draft(
+        "high",
+        "High Product",
+        "high",
+        "2024-01-01T00:00:00Z",
+        "approved",
+      ),
     ]);
     mockedPublishDraft.mockResolvedValue({} as PublishResult);
     const user = userEvent.setup();

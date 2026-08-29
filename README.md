@@ -15,6 +15,7 @@ $env:DOCKER_BUILDKIT = "0"; docker compose up --build --detach --wait
 ```
 
 Compose 会运行 Alembic 数据库迁移，并创建 `.env` 中配置的初始租户管理员。默认租户 ID 为 `00000000-0000-0000-0000-000000000001`。
+开发环境默认还会幂等创建 4 个本地演示商品及审核草稿，不会创建 Shopify 店铺连接或访问令牌。如需关闭，设置 `BOOTSTRAP_DEMO_DATA=false`。
 
 内部后台使用相同租户 ID、`.env` 中的 `BOOTSTRAP_ADMIN_EMAIL` 与 `BOOTSTRAP_ADMIN_PASSWORD` 登录。登录后可看到概览、任务、审核、商品占位导航；前端 Nginx 将 `/api` 请求代理到 FastAPI。
 

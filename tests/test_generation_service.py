@@ -180,7 +180,7 @@ def test_review_queue_orders_by_risk_then_creation_time() -> None:
             medium_old_task,
             medium_old_product,
             risk_level="medium",
-            status=DraftStatus.PENDING_REVIEW.value,
+            status=DraftStatus.APPROVED.value,
             created_at=datetime(2024, 1, 1, 0, 0, 0),
         )
         high = add_draft(

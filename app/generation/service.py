@@ -89,9 +89,11 @@ class DraftService:
         return draft
 
     def review_queue(self) -> list[ProductDraft]:
-        """Drafts awaiting human review, sorted by tenant + risk + created time.
+        """Drafts awaiting review or publishing, ordered by risk and age.
 
-        Risk ordering is high → medium → low so the riskiest items surface first.
+        Approved drafts remain visible so the reviewer can publish them from the
+        same queue. Risk ordering is high → medium → low so the riskiest
+        items surface first.
         """
 
         risk_rank = case(
@@ -102,7 +104,14 @@ class DraftService:
         )
         statement = (
             select(ProductDraft)
-            .where(ProductDraft.status == DraftStatus.PENDING_REVIEW.value)
+            .where(
+                ProductDraft.status.in_(
+                    {
+                        DraftStatus.PENDING_REVIEW.value,
+                        DraftStatus.APPROVED.value,
+                    }
+                )
+            )
             .order_by(
                 ProductDraft.tenant_id,
                 risk_rank,

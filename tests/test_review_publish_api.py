@@ -178,6 +178,10 @@ def test_publish_requires_confirmation() -> None:
 def test_publish_writes_to_shopify_and_records_version() -> None:
     client, engine, adapter, product_id = make_client()
     draft_id = _draft_id(client)
+    approved = client.post(
+        "/api/v1/reviews/approve", json={"draft_ids": [draft_id]}
+    )
+    assert approved.status_code == 200
 
     response = client.post(
         f"/api/v1/reviews/{draft_id}/publish", json={"confirmed": True}

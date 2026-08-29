@@ -87,6 +87,23 @@ def test_payload_maps_canonical_fields_to_shopify() -> None:
     assert product["status"] == "active"
     assert product["variants"][0]["sku"] == "TSHIRT-BLK"
     assert product["variants"][0]["price"] == "29.90"
+    assert "compare_at_price" not in product["variants"][0]
+    assert "metafields_title_tag" not in product
+    assert "metafields_description_tag" not in product
+    assert product["metafields"] == [
+        {
+            "namespace": "global",
+            "key": "title_tag",
+            "value": "Classic T-Shirt",
+            "type": "single_line_text_field",
+        },
+        {
+            "namespace": "global",
+            "key": "description_tag",
+            "value": "Shop our tee",
+            "type": "multi_line_text_field",
+        },
+    ]
 
 
 def test_publish_returns_success_receipt_with_remote_id() -> None:

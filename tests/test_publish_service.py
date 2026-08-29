@@ -102,6 +102,11 @@ def add_draft(
     return draft
 
 
+def approve(task: Task, draft: ProductDraft) -> None:
+    task.status = TaskState.APPROVED.value
+    draft.status = DraftStatus.APPROVED.value
+
+
 def test_publish_requires_confirmation() -> None:
     engine = make_engine()
     with TenantSession(
@@ -134,6 +139,7 @@ def test_publish_writes_snapshot_and_marks_published() -> None:
         draft = add_draft(
             session, task, product, status=DraftStatus.PENDING_REVIEW.value
         )
+        approve(task, draft)
         adapter = RecordingPlatformAdapter()
         result = PublishService(
             session, "admin@example.com", adapter
@@ -181,6 +187,7 @@ def test_publish_failure_keeps_local_state_unchanged() -> None:
         draft = add_draft(
             session, task, product, status=DraftStatus.PENDING_REVIEW.value
         )
+        approve(task, draft)
         adapter = RecordingPlatformAdapter(
             receipts=[PlatformReceipt.failed("storefront rejected the write")]
         )
@@ -196,6 +203,25 @@ def test_publish_failure_keeps_local_state_unchanged() -> None:
         assert product.status == "draft"
         assert product.shopify_product_id is None
         assert session.scalar(select(ProductSnapshot)) is None
+
+
+def test_publish_rejects_a_draft_that_has_not_been_approved() -> None:
+    engine = make_engine()
+    with TenantSession(
+        bind=engine, expire_on_commit=False, tenant_id=TENANT_ID
+    ) as session:
+        product = add_product(session)
+        task = add_task(
+            session, product, status=TaskState.AWAITING_REVIEW.value
+        )
+        draft = add_draft(
+            session, task, product, status=DraftStatus.PENDING_REVIEW.value
+        )
+
+        with pytest.raises(DraftNotPublishable):
+            PublishService(
+                session, "admin@example.com", RecordingPlatformAdapter()
+            ).publish(draft.id, confirmed=True)
 
 
 def test_second_publish_updates_existing_shopify_product() -> None:
@@ -246,6 +272,7 @@ def test_rollback_restores_previous_version_and_rolls_back_task() -> None:
         draft = add_draft(
             session, task, product, status=DraftStatus.PENDING_REVIEW.value
         )
+        approve(task, draft)
         adapter = RecordingPlatformAdapter()
         service = PublishService(session, "admin@example.com", adapter)
 

@@ -1,4 +1,16 @@
-import { Alert, Button, Card, Drawer, Empty, Popconfirm, Space, Spin, Tag, Typography } from "antd";
+import {
+  Alert,
+  Button,
+  Card,
+  Drawer,
+  Empty,
+  Image,
+  Popconfirm,
+  Space,
+  Spin,
+  Tag,
+  Typography,
+} from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -329,6 +341,20 @@ export default function ProductsPage({
             </div>
             <div>
               <Text type="secondary">图片</Text>
+              <Image.PreviewGroup>
+                <div className="product-image-gallery">
+                  {selected.images
+                    .filter((image) => /^https?:\/\//.test(image))
+                    .map((image) => (
+                      <Image
+                        key={image}
+                        src={image}
+                        alt={`${selected.title} 商品图`}
+                        width={180}
+                      />
+                    ))}
+                </div>
+              </Image.PreviewGroup>
               <div className="product-image-references">
                 {selected.images.map((image) => <Tag key={image}>{image}</Tag>)}
               </div>

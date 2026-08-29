@@ -248,16 +248,19 @@ export default function ReviewQueuePage({
             <Card key={draft.id} className="review-draft-card" variant="borderless">
               <Space orientation="vertical" size={8}>
                 <Space wrap align="start">
-                  <Checkbox
-                    aria-label={`选择 ${draft.title}`}
-                    checked={selected.has(draft.id)}
-                    onChange={(event) =>
-                      toggleSelected(draft.id, event.target.checked)
-                    }
-                  />
+                  {draft.status === "pending_review" && (
+                    <Checkbox
+                      aria-label={`选择 ${draft.title}`}
+                      checked={selected.has(draft.id)}
+                      onChange={(event) =>
+                        toggleSelected(draft.id, event.target.checked)
+                      }
+                    />
+                  )}
                   <Tag color={riskMeta[draft.risk_level].color}>
                     {riskMeta[draft.risk_level].label}
                   </Tag>
+                  {draft.status === "approved" && <Tag color="blue">已通过</Tag>}
                   <Text type="secondary">
                     {new Date(draft.created_at).toLocaleString()}
                   </Text>
@@ -270,23 +273,28 @@ export default function ReviewQueuePage({
                   </Space>
                 )}
                 <Space wrap>
-                  <Popconfirm
-                    title="确认发布到 Shopify？"
-                    description="发布属于高风险操作，将写入商户店铺并生成版本快照。"
-                    okText="确认发布"
-                    cancelText="取消"
-                    onConfirm={() => publish(draft)}
-                  >
-                    <Button type="primary" disabled={busy}>
-                      发布
-                    </Button>
-                  </Popconfirm>
-                  <Button disabled={busy} onClick={() => setEditing(draft)}>
-                    编辑
-                  </Button>
-                  <Button disabled={busy} onClick={() => regenerate(draft)}>
-                    重生成
-                  </Button>
+                  {draft.status === "approved" ? (
+                    <Popconfirm
+                      title="确认发布到 Shopify？"
+                      description="发布属于高风险操作，将写入商户店铺并生成版本快照。"
+                      okText="确认发布"
+                      cancelText="取消"
+                      onConfirm={() => publish(draft)}
+                    >
+                      <Button type="primary" disabled={busy}>
+                        发布
+                      </Button>
+                    </Popconfirm>
+                  ) : (
+                    <>
+                      <Button disabled={busy} onClick={() => setEditing(draft)}>
+                        编辑
+                      </Button>
+                      <Button disabled={busy} onClick={() => regenerate(draft)}>
+                        重生成
+                      </Button>
+                    </>
+                  )}
                 </Space>
               </Space>
             </Card>

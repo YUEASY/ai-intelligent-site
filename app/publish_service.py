@@ -109,20 +109,12 @@ class PublishService:
                 "Publishing is high-risk and requires explicit confirmation"
             )
         draft = self._get_draft(draft_id)
-        if draft.status not in {
-            DraftStatus.PENDING_REVIEW.value,
-            DraftStatus.APPROVED.value,
-        }:
+        if draft.status != DraftStatus.APPROVED.value:
             raise DraftNotPublishable(f"Draft {draft_id} cannot be published")
 
         product = ProductService(self._session).get(draft.product_id)
         task_service = TaskService(self._session, self._actor)
         task = task_service.get(draft.task_id, for_update=True)
-
-        if draft.status == DraftStatus.PENDING_REVIEW.value:
-            task_service.advance(draft.task_id, TaskState.APPROVED)
-            draft.status = DraftStatus.APPROVED.value
-            self._session.flush()
 
         before = product_state(product)
         after = apply_draft_to_state(before, draft)

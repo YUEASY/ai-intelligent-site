@@ -44,16 +44,25 @@ def to_shopify_product_payload(product: CanonicalProduct) -> dict[str, object]:
             "status": (
                 "active" if product.status is ProductStatus.ACTIVE else "draft"
             ),
-            "metafields_title_tag": product.meta_title,
-            "metafields_description_tag": product.meta_description,
+            "metafields": [
+                {
+                    "namespace": "global",
+                    "key": "title_tag",
+                    "value": product.meta_title,
+                    "type": "single_line_text_field",
+                },
+                {
+                    "namespace": "global",
+                    "key": "description_tag",
+                    "value": product.meta_description,
+                    "type": "multi_line_text_field",
+                },
+            ],
             "images": [{"src": image} for image in product.images],
             "variants": [
                 {
                     "sku": variant.sku,
                     "price": str(variant.price),
-                    "compare_at_price": (
-                        str(variant.cost) if variant.cost is not None else None
-                    ),
                     "inventory_quantity": variant.inventory,
                     "option1": _option_values(variant.options, 0),
                     "option2": _option_values(variant.options, 1),

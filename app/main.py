@@ -10,7 +10,7 @@ from app.api.products import router as products_router
 from app.api.reviews import router as reviews_router
 from app.api.shopify import router as shopify_router
 from app.api.tasks import router as tasks_router
-from app.bootstrap import ensure_bootstrap_admin
+from app.bootstrap import ensure_bootstrap_admin, ensure_bootstrap_demo_data
 from app.config import get_settings
 from app.database import InfrastructureSessionFactory
 
@@ -21,6 +21,7 @@ settings = get_settings()
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     del app
     ensure_bootstrap_admin(settings)
+    ensure_bootstrap_demo_data(settings)
     yield
 
 

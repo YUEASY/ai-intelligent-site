@@ -79,7 +79,7 @@ describe("ProductsPage", () => {
         description: "Heavy cotton tee",
         category: "Apparel",
         tags: ["summer", "cotton"],
-        images: ["front.jpg", "back.jpg"],
+        images: ["https://images.example.com/front.jpg", "back.jpg"],
         meta_title: "Classic Cotton T-Shirt",
         meta_description: "Shop our classic cotton T-shirt",
         handle: "classic-t-shirt",
@@ -121,7 +121,9 @@ describe("ProductsPage", () => {
 
     expect(screen.getByRole("dialog", { name: "Classic T-Shirt" })).toBeVisible();
     expect(screen.getByText("Heavy cotton tee")).toBeInTheDocument();
-    expect(screen.getByText("front.jpg")).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "Classic T-Shirt 商品图" }),
+    ).toHaveAttribute("src", "https://images.example.com/front.jpg");
     expect(screen.getByText("TSHIRT-BLK-S")).toBeInTheDocument();
     expect(screen.getByText("Color: Black / Size: S")).toBeInTheDocument();
     expect(screen.getByText("价格 29.90")).toBeInTheDocument();

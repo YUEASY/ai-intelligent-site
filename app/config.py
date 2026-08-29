@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     bootstrap_tenant_id: UUID = UUID("00000000-0000-0000-0000-000000000001")
     bootstrap_admin_email: str = "admin@example.com"
     bootstrap_admin_password: SecretStr = SecretStr("change-me")
+    bootstrap_demo_data: bool = True
     shopify_client_id: str = "development-shopify-client-id"
     shopify_client_secret: SecretStr = SecretStr("development-shopify-client-secret")
     shopify_redirect_uri: str = "http://localhost:8000/api/v1/shopify/oauth/callback"
