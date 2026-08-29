@@ -59,7 +59,7 @@ const pageCopy: Record<string, { eyebrow: string; title: string; body: string }>
   reviews: {
     eyebrow: "HUMAN REVIEW",
     title: "审核",
-    body: "中风险任务在此人工确认；高风险任务会被策略直接禁止。",
+    body: "查看需要人工介入的任务，并完成通过、驳回与修改操作。",
   },
   products: {
     eyebrow: "CANONICAL PRODUCTS",
