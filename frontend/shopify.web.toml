@@ -1,0 +1,8 @@
+roles = ["frontend"]
+port = 3000
+
+auth_callback_path = ["/api/v1/shopify/oauth/callback"]
+
+[commands]
+dev = "pnpm dev"
+build = "pnpm build"
