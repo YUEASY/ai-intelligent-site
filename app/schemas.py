@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.domain.product import ProductStatus
 from app.domain.risk import (
     OperationType,
     ProductField,
@@ -108,11 +109,12 @@ class ProductRead(BaseModel):
     meta_title: str
     meta_description: str
     handle: str
-    status: str
+    status: ProductStatus
     variants: list[ProductVariantRead]
 
 
 class ProductImportRead(BaseModel):
     imported_products: int
     imported_variants: int
+    imported_images: int
     products: list[ProductRead]

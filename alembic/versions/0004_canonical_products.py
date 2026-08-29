@@ -112,8 +112,63 @@ def upgrade() -> None:
         ["tenant_id"],
     )
 
+    op.create_table(
+        "product_image_assets",
+        sa.Column("id", sa.Uuid(), nullable=False),
+        sa.Column("product_id", sa.Uuid(), nullable=False),
+        sa.Column("filename", sa.String(length=255), nullable=False),
+        sa.Column("content_type", sa.String(length=255), nullable=False),
+        sa.Column("content", sa.LargeBinary(), nullable=False),
+        sa.Column("sha256", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.Uuid(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.ForeignKeyConstraint(
+            ["tenant_id", "product_id"],
+            ["products.tenant_id", "products.id"],
+            name="fk_product_image_assets_product",
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "tenant_id",
+            "product_id",
+            "filename",
+            name="uq_product_image_assets_product_filename",
+        ),
+    )
+    op.create_index(
+        op.f("ix_product_image_assets_product_id"),
+        "product_image_assets",
+        ["product_id"],
+    )
+    op.create_index(
+        op.f("ix_product_image_assets_tenant_id"),
+        "product_image_assets",
+        ["tenant_id"],
+    )
+
 
 def downgrade() -> None:
+    op.drop_index(
+        op.f("ix_product_image_assets_tenant_id"),
+        table_name="product_image_assets",
+    )
+    op.drop_index(
+        op.f("ix_product_image_assets_product_id"),
+        table_name="product_image_assets",
+    )
+    op.drop_table("product_image_assets")
     op.drop_index(
         op.f("ix_product_variants_tenant_id"), table_name="product_variants"
     )

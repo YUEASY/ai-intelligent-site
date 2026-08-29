@@ -18,6 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base, TenantOwned
+from app.domain.product import ProductStatus
 from app.domain.task_state import TaskState
 from app.shopify.types import ShopifyStoreStatus, WebhookEventStatus
 
@@ -97,7 +98,7 @@ class Product(TenantOwned, Timestamped, Base):
     __tablename__ = "products"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('draft', 'active', 'archived')",
+            f"status IN {tuple(status.value for status in ProductStatus)!r}",
             name="ck_products_status",
         ),
         UniqueConstraint(
@@ -126,6 +127,11 @@ class Product(TenantOwned, Timestamped, Base):
         cascade="all, delete-orphan",
         lazy="selectin",
         order_by="ProductVariant.id",
+    )
+    image_assets: Mapped[list["ProductImageAsset"]] = relationship(
+        back_populates="product",
+        cascade="all, delete-orphan",
+        lazy="raise",
     )
 
 
@@ -157,6 +163,32 @@ class ProductVariant(TenantOwned, Timestamped, Base):
     inventory: Mapped[int] = mapped_column(Integer, nullable=False)
     image: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     product: Mapped[Product] = relationship(back_populates="variants")
+
+
+class ProductImageAsset(TenantOwned, Timestamped, Base):
+    __tablename__ = "product_image_assets"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "product_id"],
+            ["products.tenant_id", "products.id"],
+            ondelete="CASCADE",
+            name="fk_product_image_assets_product",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "product_id",
+            "filename",
+            name="uq_product_image_assets_product_filename",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    product_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    product: Mapped[Product] = relationship(back_populates="image_assets")
 
 
 class ShopifyStore(TenantOwned, Timestamped, Base):

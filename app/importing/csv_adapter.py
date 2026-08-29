@@ -2,12 +2,12 @@ import csv
 import re
 from collections import OrderedDict
 from dataclasses import dataclass
-from decimal import Decimal
 from io import StringIO
-from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import ValidationError
+
+from app.domain.product import CanonicalProduct
 
 CSV_HEADERS = frozenset(
     {
@@ -46,6 +46,7 @@ PRODUCT_FIELDS = (
     "handle",
     "status",
 )
+EXTRA_COLUMNS_KEY = "__extra_columns__"
 
 
 @dataclass(frozen=True)
@@ -63,43 +64,13 @@ class CsvImportValidationError(ValueError):
         super().__init__(message)
 
 
-class CanonicalVariant(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    sku: str = Field(min_length=1, max_length=255)
-    options: dict[str, str]
-    price: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
-    cost: Decimal | None = Field(
-        default=None, ge=0, max_digits=12, decimal_places=2
-    )
-    inventory: int = Field(ge=0, le=2_147_483_647)
-    image: str | None = Field(default=None, max_length=2048)
-
-
-class CanonicalProduct(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    tenant_id: UUID
-    source: str = Field(min_length=1, max_length=64)
-    source_id: str = Field(min_length=1, max_length=255)
-    sku: str = Field(min_length=1, max_length=255)
-    title: str = Field(min_length=1, max_length=255)
-    description: str
-    category: str
-    tags: list[str]
-    images: list[str]
-    meta_title: str = Field(max_length=255)
-    meta_description: str
-    handle: str = Field(min_length=1, max_length=255)
-    status: Literal["draft", "active", "archived"]
-    variants: list[CanonicalVariant] = Field(min_length=1)
-
-
 class CsvImportAdapter:
     """Normalize a merchant CSV into canonical products."""
 
     def parse(self, content: str, *, tenant_id: UUID) -> list[CanonicalProduct]:
-        rows = csv.DictReader(StringIO(content.removeprefix("\ufeff")))
+        rows = csv.DictReader(
+            StringIO(content.removeprefix("\ufeff")), restkey=EXTRA_COLUMNS_KEY
+        )
         missing_headers = CSV_HEADERS.difference(rows.fieldnames or ())
         if missing_headers:
             missing = ", ".join(sorted(missing_headers))
@@ -159,16 +130,24 @@ class CsvImportAdapter:
         return list(grouped.values())
 
 
-def _parse_row(row: dict[str, str | None], tenant_id: UUID) -> CanonicalProduct:
+def _parse_row(
+    row: dict[str, str | list[str] | None], tenant_id: UUID
+) -> CanonicalProduct:
     def value(name: str) -> str:
-        return (row.get(name) or "").strip()
+        raw_value = row.get(name)
+        return raw_value.strip() if isinstance(raw_value, str) else ""
+
+    extra_columns = row.get(EXTRA_COLUMNS_KEY)
+    if isinstance(extra_columns, list):
+        raise ValueError("unexpected extra columns")
 
     extra_option_columns = [
         name
         for name, raw_value in row.items()
         if name is not None
         and re.fullmatch(r"option([3-9]|[1-9][0-9]+)_(name|value)", name)
-        and (raw_value or "").strip()
+        and isinstance(raw_value, str)
+        and raw_value.strip()
     ]
     if extra_option_columns:
         raise ValueError("variants support at most 2 option dimensions")

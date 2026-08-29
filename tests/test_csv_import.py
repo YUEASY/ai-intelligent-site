@@ -1,19 +1,26 @@
-# ruff: noqa: E501
-
 from uuid import UUID
 
 import pytest
 
 from app.importing.csv_adapter import CsvImportAdapter, CsvImportValidationError
+from tests.csv_samples import CSV_HEADERS, canonical_row, make_csv
 
 TENANT_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 
 def test_csv_is_normalized_into_a_canonical_product_with_variants() -> None:
-    csv_content = """source,source_id,sku,title,description,category,tags,images,meta_title,meta_description,handle,status,variant_sku,option1_name,option1_value,option2_name,option2_value,price,cost,inventory,variant_image
-merchant_csv,product-1,TSHIRT,Classic T-Shirt,Heavy cotton tee,Apparel,summer|cotton,front.jpg|back.jpg,Classic Cotton T-Shirt,Shop our classic cotton T-shirt,classic-t-shirt,draft,TSHIRT-BLK-S,Color,Black,Size,S,29.90,12.50,8,black-small.jpg
-merchant_csv,product-1,TSHIRT,Classic T-Shirt,Heavy cotton tee,Apparel,summer|cotton,front.jpg|back.jpg,Classic Cotton T-Shirt,Shop our classic cotton T-shirt,classic-t-shirt,draft,TSHIRT-WHT-M,Color,White,Size,M,31.90,13.00,5,white-medium.jpg
-"""
+    csv_content = make_csv(
+        canonical_row(),
+        canonical_row(
+            variant_sku="TSHIRT-WHT-M",
+            option1_value="White",
+            option2_value="M",
+            price="31.90",
+            cost="13.00",
+            inventory="5",
+            variant_image="white-medium.jpg",
+        ),
+    )
 
     products = CsvImportAdapter().parse(csv_content, tenant_id=TENANT_ID)
 
@@ -54,11 +61,58 @@ merchant_csv,product-1,TSHIRT,Classic T-Shirt,Heavy cotton tee,Apparel,summer|co
     ]
 
 
+def test_all_critical_fields_parse_for_at_least_95_percent_of_a_batch() -> None:
+    rows = [
+        canonical_row(
+            source_id=f"product-{index}",
+            sku=f"PRODUCT-{index}",
+            title=f"Product {index}",
+            handle=f"product-{index}",
+            variant_sku=f"PRODUCT-{index}-VARIANT",
+            images=f"https://images.example.com/{index}.jpg",
+            variant_image=f"https://images.example.com/{index}-variant.jpg",
+        )
+        for index in range(20)
+    ]
+
+    products = CsvImportAdapter().parse(make_csv(*rows), tenant_id=TENANT_ID)
+
+    assert len(products) / len(rows) >= 0.95
+    assert all(
+        product.source
+        and product.source_id
+        and product.sku
+        and product.title
+        and product.description
+        and product.category
+        and product.tags
+        and product.images
+        and product.meta_title
+        and product.meta_description
+        and product.handle
+        and product.status
+        and product.variants[0].sku
+        and product.variants[0].options
+        and product.variants[0].price >= 0
+        and product.variants[0].cost is not None
+        and product.variants[0].inventory >= 0
+        and product.variants[0].image
+        for product in products
+    )
+
+
 def test_invalid_rows_are_all_reported_with_line_numbers() -> None:
-    csv_content = """source,source_id,sku,title,description,category,tags,images,meta_title,meta_description,handle,status,variant_sku,option1_name,option1_value,option2_name,option2_value,price,cost,inventory,variant_image
-merchant_csv,product-1,TSHIRT,,Heavy cotton tee,Apparel,summer,front.jpg,Meta,Description,classic-t-shirt,draft,TSHIRT-S,Size,S,,,29.90,12.50,8,small.jpg
-merchant_csv,product-2,MUG,Mug,Ceramic mug,Home,gift,mug.jpg,Mug,Description,mug,draft,MUG-WHITE,Color,White,,,not-a-price,3.00,12,mug-white.jpg
-"""
+    csv_content = make_csv(
+        canonical_row(title=""),
+        canonical_row(
+            source_id="product-2",
+            sku="MUG",
+            title="Mug",
+            handle="mug",
+            variant_sku="MUG-WHITE",
+            price="not-a-price",
+        ),
+    )
 
     with pytest.raises(CsvImportValidationError) as captured:
         CsvImportAdapter().parse(csv_content, tenant_id=TENANT_ID)
@@ -69,9 +123,10 @@ merchant_csv,product-2,MUG,Mug,Ceramic mug,Home,gift,mug.jpg,Mug,Description,mug
 
 
 def test_csv_rejects_more_than_two_variant_option_dimensions() -> None:
-    csv_content = """source,source_id,sku,title,description,category,tags,images,meta_title,meta_description,handle,status,variant_sku,option1_name,option1_value,option2_name,option2_value,option3_name,option3_value,price,cost,inventory,variant_image
-merchant_csv,product-1,SHIRT,Shirt,Cotton shirt,Apparel,summer,front.jpg,Shirt,Description,shirt,draft,SHIRT-BLK-S-SLIM,Color,Black,Size,S,Fit,Slim,29.90,12.50,8,black-small.jpg
-"""
+    headers = (*CSV_HEADERS[:17], "option3_name", "option3_value", *CSV_HEADERS[17:])
+    csv_content = make_csv(
+        canonical_row(option3_name="Fit", option3_value="Slim"), headers=headers
+    )
 
     with pytest.raises(CsvImportValidationError) as captured:
         CsvImportAdapter().parse(csv_content, tenant_id=TENANT_ID)
@@ -81,10 +136,15 @@ merchant_csv,product-1,SHIRT,Shirt,Cotton shirt,Apparel,summer,front.jpg,Shirt,D
 
 
 def test_csv_rejects_conflicting_product_fields_across_variant_rows() -> None:
-    csv_content = """source,source_id,sku,title,description,category,tags,images,meta_title,meta_description,handle,status,variant_sku,option1_name,option1_value,option2_name,option2_value,price,cost,inventory,variant_image
-merchant_csv,product-1,SHIRT,Shirt,Cotton shirt,Apparel,summer,front.jpg,Shirt,Description,shirt,draft,SHIRT-S,Size,S,,,29.90,12.50,8,small.jpg
-merchant_csv,product-1,SHIRT,Different title,Cotton shirt,Apparel,summer,front.jpg,Shirt,Description,shirt,draft,SHIRT-M,Size,M,,,29.90,12.50,8,medium.jpg
-"""
+    csv_content = make_csv(
+        canonical_row(),
+        canonical_row(
+            title="Different title",
+            variant_sku="TSHIRT-WHT-M",
+            option1_value="White",
+            option2_value="M",
+        ),
+    )
 
     with pytest.raises(CsvImportValidationError) as captured:
         CsvImportAdapter().parse(csv_content, tenant_id=TENANT_ID)
@@ -94,10 +154,27 @@ merchant_csv,product-1,SHIRT,Different title,Cotton shirt,Apparel,summer,front.j
 
 
 def test_empty_csv_is_rejected() -> None:
-    header_only = """source,source_id,sku,title,description,category,tags,images,meta_title,meta_description,handle,status,variant_sku,option1_name,option1_value,option2_name,option2_value,price,cost,inventory,variant_image
-"""
-
     with pytest.raises(CsvImportValidationError) as captured:
-        CsvImportAdapter().parse(header_only, tenant_id=TENANT_ID)
+        CsvImportAdapter().parse(make_csv(), tenant_id=TENANT_ID)
 
     assert "CSV contains no product rows" in str(captured.value)
+
+
+def test_csv_rejects_surplus_cells_in_a_row() -> None:
+    csv_content = make_csv(canonical_row()).rstrip("\n") + ",unexpected\n"
+
+    with pytest.raises(CsvImportValidationError) as captured:
+        CsvImportAdapter().parse(csv_content, tenant_id=TENANT_ID)
+
+    assert captured.value.errors[0].line == 2
+    assert "unexpected extra columns" in str(captured.value)
+
+
+def test_csv_rejects_a_blank_surplus_cell_in_a_row() -> None:
+    csv_content = make_csv(canonical_row()).rstrip("\n") + ",\n"
+
+    with pytest.raises(CsvImportValidationError) as captured:
+        CsvImportAdapter().parse(csv_content, tenant_id=TENANT_ID)
+
+    assert captured.value.errors[0].line == 2
+    assert "unexpected extra columns" in str(captured.value)

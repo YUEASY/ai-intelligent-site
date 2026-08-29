@@ -1,5 +1,3 @@
-# ruff: noqa: E501
-
 from collections.abc import Iterator
 from uuid import UUID, uuid4
 
@@ -12,6 +10,7 @@ from app.api.products import router
 from app.database import Base, TenantSession
 from app.dependencies import RequestContext, get_request_context
 from app.models import AdminUser
+from tests.csv_samples import canonical_row, make_csv
 
 TENANT_A = UUID("00000000-0000-0000-0000-000000000001")
 TENANT_B = UUID("00000000-0000-0000-0000-000000000002")
@@ -48,17 +47,19 @@ def test_imported_products_are_listed_only_for_the_current_tenant() -> None:
     app.include_router(router, prefix="/api/v1")
     app.dependency_overrides[get_request_context] = request_context
     client = TestClient(app)
-    csv_content = """source,source_id,sku,title,description,category,tags,images,meta_title,meta_description,handle,status,variant_sku,option1_name,option1_value,option2_name,option2_value,price,cost,inventory,variant_image
-merchant_csv,product-1,TSHIRT,Classic T-Shirt,Heavy cotton tee,Apparel,summer|cotton,front.jpg|back.jpg,Classic Cotton T-Shirt,Shop our classic cotton T-shirt,classic-t-shirt,draft,TSHIRT-BLK-S,Color,Black,Size,S,29.90,12.50,8,black-small.jpg
-"""
+    csv_content = make_csv(canonical_row())
 
-    imported = client.post(
-        "/api/v1/products/import",
-        files={"file": ("products.csv", csv_content, "text/csv")},
-    )
+    upload_files: list[tuple[str, tuple[str, bytes | str, str]]] = [
+        ("file", ("products.csv", csv_content, "text/csv")),
+        ("images", ("front.jpg", b"front-image", "image/jpeg")),
+        ("images", ("back.jpg", b"back-image", "image/jpeg")),
+        ("images", ("black-small.jpg", b"variant-image", "image/jpeg")),
+    ]
+    imported = client.post("/api/v1/products/import", files=upload_files)
 
     assert imported.status_code == 201
     assert imported.json()["imported_products"] == 1
+    assert imported.json()["imported_images"] == 3
     products = client.get("/api/v1/products")
     assert products.status_code == 200
     assert products.json() == [
@@ -90,17 +91,31 @@ merchant_csv,product-1,TSHIRT,Classic T-Shirt,Heavy cotton tee,Apparel,summer|co
             ],
         }
     ]
+    product_id = products.json()[0]["id"]
+    stored_image = client.get(f"/api/v1/products/{product_id}/images/front.jpg")
+    assert stored_image.status_code == 200
+    assert stored_image.content == b"front-image"
+    assert stored_image.headers["content-type"] == "image/jpeg"
 
-    duplicate = client.post(
-        "/api/v1/products/import",
-        files={"file": ("products.csv", csv_content, "text/csv")},
-    )
+    duplicate = client.post("/api/v1/products/import", files=upload_files)
     assert duplicate.status_code == 409
     assert duplicate.json()["detail"] == (
         "Product merchant_csv/product-1 already exists for this tenant"
     )
 
     current_tenant["id"] = TENANT_B
+    assert client.get("/api/v1/products").json() == []
+    other_tenant_image = client.get(
+        f"/api/v1/products/{product_id}/images/front.jpg"
+    )
+    assert other_tenant_image.status_code == 404
+
+    missing_images = client.post(
+        "/api/v1/products/import",
+        files={"file": ("products.csv", csv_content, "text/csv")},
+    )
+    assert missing_images.status_code == 422
+    assert "Missing uploaded images" in missing_images.json()["detail"]
     assert client.get("/api/v1/products").json() == []
 
     invalid_csv = csv_content.replace(

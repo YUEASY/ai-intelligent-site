@@ -24,8 +24,9 @@ Compose 会运行 Alembic 数据库迁移，并创建 `.env` 中配置的初始�
 - `GET /api/v1/tasks`：仅列出当前租户的任务。
 - `POST /api/v1/tasks/{task_id}/transitions`：按状态机推进审核、发布或回滚。
 - `GET /api/v1/tasks/{task_id}/audit-log`：查看每次状态迁移的操作者、时间和前后状态。
-- `POST /api/v1/products/import`：以 multipart 文件字段 `file` 上传 UTF-8 CSV，归一化并持久化商品与变体；任一非法行都会让整次导入失败并返回行号。
+- `POST /api/v1/products/import`：以 multipart 字段 `file` 上传 UTF-8 CSV，并用可重复字段 `images` 上传图片包；归一化并持久化商品、变体与图片，任一非法行都会让整次导入失败并返回行号。
 - `GET /api/v1/products`：列出当前商户的商品标准模型与变体。
+- `GET /api/v1/products/{product_id}/images/{filename}`：读取当前商户已导入的商品图片。
 - `GET /api/v1/shopify/oauth/authorize?shop_domain=...`：生成仅含商品与内容写权限的 Shopify 授权 URL。
 - `GET /api/v1/shopify/oauth/callback`：Shopify OAuth 回调；Token 仅以 AES-GCM 密文落库。
 - `GET /api/v1/shopify/stores`：查看当前商户的店铺连接状态。
@@ -45,7 +46,7 @@ Compose 会运行 Alembic 数据库迁移，并创建 `.env` 中配置的初始�
 
 客户端不能提交 `risk_level`；服务按操作类型与变更字段的白名单确定风险，未知或混合的高风险字段按最高风险处理。
 
-商品 CSV 每行表示一个变体；相同 `source + source_id` 的行合并为一个商品。`tags`、`images` 使用 `|` 分隔，图片值可为 URL 或随后发布流程可解析的文件名；变体最多使用两个选项维度：
+商品 CSV 每行表示一个变体；相同 `source + source_id` 的行合并为一个商品。`tags`、`images` 使用 `|` 分隔。HTTP(S) 图片可直接写 URL；文件名引用必须在同次请求中用 `images` 上传并会持久化，单张上限 10 MB。变体最多使用两个选项维度：
 
 ```csv
 source,source_id,sku,title,description,category,tags,images,meta_title,meta_description,handle,status,variant_sku,option1_name,option1_value,option2_name,option2_value,price,cost,inventory,variant_image
