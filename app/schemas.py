@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
@@ -77,3 +78,41 @@ class AuditLogRead(BaseModel):
     from_status: TaskState
     to_status: TaskState
     occurred_at: datetime
+
+
+class ProductVariantRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    sku: str
+    options: dict[str, str]
+    price: Decimal
+    cost: Decimal | None
+    inventory: int
+    image: str | None
+
+
+class ProductRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tenant_id: UUID
+    source: str
+    source_id: str
+    sku: str
+    title: str
+    description: str
+    category: str
+    tags: list[str]
+    images: list[str]
+    meta_title: str
+    meta_description: str
+    handle: str
+    status: str
+    variants: list[ProductVariantRead]
+
+
+class ProductImportRead(BaseModel):
+    imported_products: int
+    imported_variants: int
+    products: list[ProductRead]

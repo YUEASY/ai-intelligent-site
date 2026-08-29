@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -8,12 +9,13 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Integer,
     LargeBinary,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base, TenantOwned
 from app.domain.task_state import TaskState
@@ -89,6 +91,72 @@ class TaskAuditLog(TenantOwned, Base):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class Product(TenantOwned, Timestamped, Base):
+    __tablename__ = "products"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'active', 'archived')",
+            name="ck_products_status",
+        ),
+        UniqueConstraint(
+            "tenant_id", "source", "source_id", name="uq_products_tenant_source"
+        ),
+        UniqueConstraint("tenant_id", "sku", name="uq_products_tenant_sku"),
+        UniqueConstraint("tenant_id", "handle", name="uq_products_tenant_handle"),
+        UniqueConstraint("tenant_id", "id", name="uq_products_tenant_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    sku: Mapped[str] = mapped_column(String(255), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(String(255), nullable=False)
+    tags: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    images: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    meta_title: Mapped[str] = mapped_column(String(255), nullable=False)
+    meta_description: Mapped[str] = mapped_column(Text, nullable=False)
+    handle: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    variants: Mapped[list["ProductVariant"]] = relationship(
+        back_populates="product",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="ProductVariant.id",
+    )
+
+
+class ProductVariant(TenantOwned, Timestamped, Base):
+    __tablename__ = "product_variants"
+    __table_args__ = (
+        CheckConstraint("price >= 0", name="ck_product_variants_price"),
+        CheckConstraint(
+            "cost IS NULL OR cost >= 0", name="ck_product_variants_cost"
+        ),
+        CheckConstraint("inventory >= 0", name="ck_product_variants_inventory"),
+        ForeignKeyConstraint(
+            ["tenant_id", "product_id"],
+            ["products.tenant_id", "products.id"],
+            ondelete="CASCADE",
+            name="fk_product_variants_product",
+        ),
+        UniqueConstraint(
+            "tenant_id", "sku", name="uq_product_variants_tenant_sku"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    product_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
+    sku: Mapped[str] = mapped_column(String(255), nullable=False)
+    options: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False)
+    price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    cost: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    inventory: Mapped[int] = mapped_column(Integer, nullable=False)
+    image: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    product: Mapped[Product] = relationship(back_populates="variants")
 
 
 class ShopifyStore(TenantOwned, Timestamped, Base):

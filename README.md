@@ -24,6 +24,8 @@ Compose 会运行 Alembic 数据库迁移，并创建 `.env` 中配置的初始�
 - `GET /api/v1/tasks`：仅列出当前租户的任务。
 - `POST /api/v1/tasks/{task_id}/transitions`：按状态机推进审核、发布或回滚。
 - `GET /api/v1/tasks/{task_id}/audit-log`：查看每次状态迁移的操作者、时间和前后状态。
+- `POST /api/v1/products/import`：以 multipart 文件字段 `file` 上传 UTF-8 CSV，归一化并持久化商品与变体；任一非法行都会让整次导入失败并返回行号。
+- `GET /api/v1/products`：列出当前商户的商品标准模型与变体。
 - `GET /api/v1/shopify/oauth/authorize?shop_domain=...`：生成仅含商品与内容写权限的 Shopify 授权 URL。
 - `GET /api/v1/shopify/oauth/callback`：Shopify OAuth 回调；Token 仅以 AES-GCM 密文落库。
 - `GET /api/v1/shopify/stores`：查看当前商户的店铺连接状态。
@@ -42,6 +44,13 @@ Compose 会运行 Alembic 数据库迁移，并创建 `.env` 中配置的初始�
 ```
 
 客户端不能提交 `risk_level`；服务按操作类型与变更字段的白名单确定风险，未知或混合的高风险字段按最高风险处理。
+
+商品 CSV 每行表示一个变体；相同 `source + source_id` 的行合并为一个商品。`tags`、`images` 使用 `|` 分隔，图片值可为 URL 或随后发布流程可解析的文件名；变体最多使用两个选项维度：
+
+```csv
+source,source_id,sku,title,description,category,tags,images,meta_title,meta_description,handle,status,variant_sku,option1_name,option1_value,option2_name,option2_value,price,cost,inventory,variant_image
+merchant_csv,product-1,TSHIRT,Classic T-Shirt,Heavy cotton tee,Apparel,summer|cotton,front.jpg|back.jpg,Classic Cotton T-Shirt,Shop our classic cotton T-shirt,classic-t-shirt,draft,TSHIRT-BLK-S,Color,Black,Size,S,29.90,12.50,8,black-small.jpg
+```
 
 低风险任务由 worker 从 `pending → running → published`；中/高风险任务推进到 `awaiting_review`。可恢复异常按 1、2、4 秒指数退避重试 3 次后进入 `failed`，确定性错误直接进入 `failed`。
 
