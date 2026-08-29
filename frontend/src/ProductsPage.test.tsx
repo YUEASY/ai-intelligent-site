@@ -30,6 +30,26 @@ describe("ProductsPage", () => {
     vi.restoreAllMocks();
   });
 
+  it("offers matching CSV and image examples for download", async () => {
+    mockedGetProducts.mockResolvedValue([]);
+
+    render(<ProductsPage />);
+
+    await screen.findByText("尚未导入商品");
+    const csvDownload = screen.getByRole("link", { name: "下载 CSV 示例" });
+    const imageDownload = screen.getByRole("link", { name: "下载配套图片" });
+    expect(csvDownload).toHaveAttribute(
+      "href",
+      "/examples/product-import-example.csv",
+    );
+    expect(csvDownload).toHaveAttribute("download", "product-import-example.csv");
+    expect(imageDownload).toHaveAttribute(
+      "href",
+      "/examples/product-example.svg",
+    );
+    expect(imageDownload).toHaveAttribute("download", "product-example.svg");
+  });
+
   it("lists imported products and shows every variant in the detail view", async () => {
     mockedGetProducts.mockResolvedValue([
       {

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800" role="img" aria-labelledby="title desc">
+  <title id="title">Example ceramic mug</title>
+  <desc id="desc">A green ceramic mug used by the CSV import example.</desc>
+  <rect width="800" height="800" rx="64" fill="#eef7f4"/>
+  <path d="M220 220h300v300c0 88-72 160-160 160s-160-72-160-160V240c0-11 9-20 20-20Z" fill="#0b8069"/>
+  <path d="M520 300h50c77 0 140 63 140 140s-63 140-140 140h-62v-70h62c39 0 70-31 70-70s-31-70-70-70h-50v-70Z" fill="#075d4d"/>
+  <path d="M245 270h230" stroke="#bce3d8" stroke-width="24" stroke-linecap="round"/>
+  <text x="360" y="470" fill="#fff" font-family="Arial, sans-serif" font-size="42" font-weight="700" text-anchor="middle">EXAMPLE</text>
+</svg>

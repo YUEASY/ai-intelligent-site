@@ -94,6 +94,21 @@ export default function ProductsPage({
           <Text type="secondary">
             上传 UTF-8 CSV；CSV 中的本地图片文件名需与图片包一致。
           </Text>
+          <Space wrap className="import-examples">
+            <a
+              href="/examples/product-import-example.csv"
+              download="product-import-example.csv"
+            >
+              下载 CSV 示例
+            </a>
+            <a
+              href="/examples/product-example.svg"
+              download="product-example.svg"
+            >
+              下载配套图片
+            </a>
+            <Text type="secondary">下载后可直接选择两个示例文件试传。</Text>
+          </Space>
           <label className="file-field">
             <Text strong>CSV 文件</Text>
             <input

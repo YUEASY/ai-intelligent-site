@@ -1,0 +1,2 @@
+source,source_id,sku,title,description,category,tags,images,meta_title,meta_description,handle,status,variant_sku,option1_name,option1_value,option2_name,option2_value,price,cost,inventory,variant_image
+merchant_csv,example-product-1,EXAMPLE-MUG,Example Ceramic Mug,A sturdy example mug,Home,gift|ceramic,product-example.svg,Example Ceramic Mug,A sturdy ceramic mug,example-ceramic-mug,draft,EXAMPLE-MUG-WHITE,Color,White,,,19.90,7.50,12,product-example.svg
