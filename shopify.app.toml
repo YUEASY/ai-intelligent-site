@@ -6,8 +6,20 @@ name = "ai-intelligent-site"
 application_url = "https://example.com"
 embedded = true
 
+[build]
+automatically_update_urls_on_dev = true
+
 [webhooks]
 api_version = "2026-07"
+
+  [[webhooks.subscriptions]]
+  uri = "/api/v1/shopify/webhooks/ingress/00000000-0000-0000-0000-000000000001"
+  topics = [
+  "app/uninstalled",
+  "products/create",
+  "products/delete",
+  "products/update"
+]
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
@@ -17,6 +29,3 @@ use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [ "https://example.com/api/v1/shopify/oauth/callback" ]
-
-[build]
-automatically_update_urls_on_dev = true

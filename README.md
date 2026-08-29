@@ -5,7 +5,7 @@ FastAPI + Celery + PostgreSQL + Redis 后端与 React + Vite + Ant Design 内部
 ## 启动
 
 1. 复制 `.env.example` 为 `.env`，修改 `JWT_SECRET`、管理员密码与 Shopify 配置。`SHOPIFY_TOKEN_ENCRYPTION_KEY` 必须是 Base64 编码的 32 字节随机密钥。
-2. 运行 `docker compose up --build --detach --wait`。
+2. 运行 `docker compose up --build --detach --wait`。(`docker compose up -d --force-recreate backend worker`)
 3. 打开内部后台 <http://localhost:3000>；API 文档位于 <http://localhost:8000/docs>。`GET /health` 返回 `{"status":"healthy"}` 时后端依赖均可用。
 
 若 Windows 的 Docker 配置启用了 Bake，且仓库路径包含中文，使用下面的一键兼容命令避开 BuildKit 的路径编码问题：

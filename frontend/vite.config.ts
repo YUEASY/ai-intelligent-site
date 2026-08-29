@@ -12,7 +12,9 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 3000,
-
+    // Shopify CLI generates a new quick-tunnel subdomain on every dev run.
+    // Restrict the exception to Cloudflare quick tunnels instead of allowing all hosts.
+    allowedHosts: [".trycloudflare.com"],
     proxy: {
       "/api": {
         target: "http://127.0.0.1:8000",

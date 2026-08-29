@@ -179,6 +179,7 @@ function AdminShell({ admin, onLogout }: { admin: Admin; onLogout: () => void })
         </div>
         <Menu
           mode="inline"
+          theme="dark"
           selectedKeys={[page]}
           items={navigation}
           onClick={({ key }) => setPage(key)}

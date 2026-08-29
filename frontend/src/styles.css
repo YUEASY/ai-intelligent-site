@@ -78,8 +78,10 @@ button, input { font: inherit; }
 .sidebar-brand strong { font-size: 15px; }
 .sidebar-brand small { margin-top: 3px; color: rgba(255,255,255,.46); font-size: 11px; letter-spacing: .08em; }
 .sidebar-logo { width: 40px; height: 40px; border-radius: 11px; font-size: 18px; }
-.admin-sider .ant-menu { padding: 8px 12px; color: rgba(255,255,255,.68); background: transparent; border: 0; }
+.admin-sider .ant-menu { padding: 8px 12px; background: transparent; border: 0; }
 .admin-sider .ant-menu-item { height: 46px; margin-block: 6px; }
+.admin-sider .ant-menu-item:not(.ant-menu-item-selected) { color: rgba(255,255,255,.82); }
+.admin-sider .ant-menu-dark .ant-menu-item:not(.ant-menu-item-selected):hover { color: #fff; background: rgba(255,255,255,.08); }
 .admin-sider .ant-menu-item-selected { color: #9af0d3; background: rgba(64, 206, 158, .13); }
 .sidebar-footnote { position: absolute; bottom: 28px; left: 30px; color: rgba(255,255,255,.32); font-size: 11px; letter-spacing: .12em; }
 

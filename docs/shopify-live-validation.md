@@ -23,7 +23,9 @@
 - [ ] `shopify.webhooks.toml` 声明了 `app/uninstalled`、`products/create`、`products/update`、`products/delete`，URI 指向引导租户。
 - [ ] 运行 `shopify app deploy`（或 `shopify app config push`）让 Scope、回调 URL 与 Webhook 订阅在 Partner 后台生效。
 
-> 注意：后端从 `.env` 读取 `SHOPIFY_REDIRECT_URI`，必须与 Partner 后台 / CLI 注册的回调 URL 完全一致。用 `shopify app dev` 建立 Tunnel 时 CLI 会改写 TOML 中的 URL，但不会改写 `.env`，两者需手动保持一致。
+> 推荐通过 `./scripts/shopify-dev.ps1` 启动联调环境。它会识别 Shopify CLI
+> 生成的 Tunnel URL，将回调地址注入 backend/worker，并在退出时恢复 Docker
+> frontend 与 `.env` 配置，无需手动修改随机域名。
 
 ## 2. 真实安装与 OAuth 回调
 
