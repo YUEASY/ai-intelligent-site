@@ -3,6 +3,7 @@ from typing import cast
 
 from sqlalchemy import func, select
 
+from app.cost_service import CostService
 from app.database import TenantSession
 from app.domain.draft import DraftStatus
 from app.domain.page import CanonicalPage
@@ -10,7 +11,11 @@ from app.domain.product import CanonicalProduct, CanonicalVariant, ProductStatus
 from app.domain.risk import ProductField, RiskLevel
 from app.domain.snapshot import SnapshotKind, diff_states
 from app.domain.task_state import TaskState
-from app.generation.workflow import ProductWorkflow, build_default_workflow
+from app.generation.workflow import (
+    GenerationError,
+    ProductWorkflow,
+    build_default_workflow,
+)
 from app.models import Page, PageDraft, PageSnapshot, Task
 from app.page_service import PageService
 from app.platform import PlatformAdapter
@@ -85,18 +90,24 @@ class PageSeoService:
                 )
             ],
         )
-        generated = self._workflow.generate(
-            pseudo, [ProductField(field) for field in task.changed_fields]
-        )
+        fields = [ProductField(field) for field in task.changed_fields]
+        try:
+            generated = self._workflow.generate(pseudo, fields)
+        except GenerationError as exc:
+            if exc.usages:
+                CostService(self._session).record(task.id, exc.usages)
+            raise
+        CostService(self._session).record(task.id, generated.usages)
+        content = generated.content
         draft = PageDraft(
             tenant_id=page.tenant_id,
             page_id=page.id,
             task_id=task.id,
-            title=generated.title or page.title,
+            title=content.title or page.title,
             body_html=page.body_html,
-            meta_title=generated.meta_title or page.meta_title,
-            meta_description=generated.meta_description or page.meta_description,
-            seo_tags=generated.seo_tags or list(page.seo_tags),
+            meta_title=content.meta_title or page.meta_title,
+            meta_description=content.meta_description or page.meta_description,
+            seo_tags=content.seo_tags or list(page.seo_tags),
             risk_level=task.risk_level,
             status=DraftStatus.PENDING_REVIEW.value,
         )

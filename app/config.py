@@ -1,3 +1,4 @@
+from decimal import Decimal
 from functools import lru_cache
 from typing import Literal
 from uuid import UUID
@@ -28,6 +29,13 @@ class Settings(BaseSettings):
     shopify_token_encryption_key: SecretStr = SecretStr(
         "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
     )
+    # Cost attribution: price per 1M tokens per model tier (USD).
+    small_model_usd_per_1m_tokens: Decimal = Decimal("0.15")
+    large_model_usd_per_1m_tokens: Decimal = Decimal("2.50")
+    # Alerting thresholds.
+    alert_daily_cost_threshold_usd: Decimal = Decimal("6.00")
+    alert_worker_backlog_threshold: int = 100
+    alert_worker_heartbeat_timeout_seconds: int = 300
 
     @model_validator(mode="after")
     def reject_development_secrets_in_production(self) -> "Settings":

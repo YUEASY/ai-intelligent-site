@@ -11,7 +11,7 @@ from app.domain.risk import OperationType, ProductField, RiskLevel
 from app.domain.task_state import TaskState
 from app.generation.service import DraftService, GenerationService
 from app.generation.workflow import ALL_CONTENT_FIELDS
-from app.models import Product, ProductDraft, ProductVariant, Task
+from app.models import Product, ProductDraft, ProductVariant, Task, TaskModelUsage
 from app.schemas import TaskCreate, TaskKind
 from app.services import TaskService
 from app.worker import run_task_workflow
@@ -130,6 +130,37 @@ def test_generation_service_writes_a_pending_review_draft() -> None:
         assert draft.description == "Heavy cotton tee"
         assert draft.risk_level == RiskLevel.MEDIUM.value
         assert draft.status == DraftStatus.PENDING_REVIEW.value
+
+
+def test_generation_records_model_usage_and_cost() -> None:
+    engine = make_engine()
+    with TenantSession(
+        bind=engine, expire_on_commit=False, tenant_id=TENANT_ID
+    ) as session:
+        product = add_product(session, "TSHIRT", "Classic T-Shirt")
+        task = TaskService(session, actor="admin@example.com").create(
+            TaskCreate(
+                kind=TaskKind.PRODUCT,
+                operation_type=OperationType.UPDATE,
+                changed_fields=set(ALL_CONTENT_FIELDS),
+                product_id=product.id,
+            )
+        )
+        session.commit()
+
+        GenerationService(session).generate(task)
+        session.commit()
+
+        usages = list(
+            session.scalars(
+                select(TaskModelUsage).where(TaskModelUsage.task_id == task.id)
+            )
+        )
+        assert len(usages) == 2  # one small + one large model invocation
+        tiers = {usage.tier for usage in usages}
+        assert tiers == {"small", "large"}
+        assert all(usage.input_tokens > 0 for usage in usages)
+        assert all(usage.api_cost >= 0 for usage in usages)
 
 
 def test_review_queue_orders_by_risk_then_creation_time() -> None:

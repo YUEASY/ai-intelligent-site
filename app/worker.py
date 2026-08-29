@@ -12,6 +12,7 @@ from app.domain.risk import RiskLevel
 from app.domain.task_state import InvalidTaskTransition, TaskState
 from app.generation.service import GenerationService
 from app.generation.workflow import GenerationError
+from app.health_service import HealthService
 from app.models import Task
 from app.page_seo_service import PageSeoService
 from app.platform import PlatformAdapter
@@ -126,6 +127,7 @@ def build_platform_adapter_factory() -> ShopifyPlatformAdapterFactory:
 
 def _run_workflow(task_id: UUID, tenant_id: UUID) -> str:
     with tenant_session_scope(tenant_id) as session:
+        HealthService(session).record_heartbeat("celery-worker")
         return run_task_workflow(session, task_id)
 
 
@@ -192,3 +194,19 @@ def process_shopify_webhook(event_id: str, tenant_id: str) -> str:
             except WebhookEventNotFound:
                 return WebhookEventStatus.DEAD_LETTER.value
         return WebhookEventStatus.DEAD_LETTER.value
+
+
+@celery_app.task(name="monitor.health")  # type: ignore[untyped-decorator]
+def monitor_health() -> str:
+    """Check worker heartbeat + task backlog and raise a health alert if bad."""
+    with tenant_session_scope(get_settings().bootstrap_tenant_id) as session:
+        report = HealthService(session).check()
+    return "healthy" if report.healthy else "unhealthy"
+
+
+@celery_app.task(name="monitor.worker_heartbeat")  # type: ignore[untyped-decorator]
+def worker_heartbeat() -> str:
+    """Record a liveness heartbeat so an idle worker is not reported stale."""
+    with tenant_session_scope(get_settings().bootstrap_tenant_id) as session:
+        HealthService(session).record_heartbeat("celery-worker")
+    return "ok"

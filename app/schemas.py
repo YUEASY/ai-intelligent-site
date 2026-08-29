@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.domain.alert import AlertKind, AlertStatus
 from app.domain.draft import DraftStatus
 from app.domain.product import ProductStatus
 from app.domain.review import RejectionReason
@@ -291,3 +292,71 @@ class PageRollbackRead(BaseModel):
     page: PageRead
     task: TaskRead | None
     snapshot: PageSnapshotRead
+
+
+class TaskCostRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tenant_id: UUID
+    task_id: UUID
+    tier: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    api_cost: Decimal
+    created_at: datetime
+
+
+class CostOverviewRead(BaseModel):
+    tenant_id: UUID
+    daily_cost: Decimal
+    daily_threshold: Decimal
+    total_cost: Decimal
+    total_tokens: int
+    tasks: list[TaskCostRead]
+
+
+class AlertRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tenant_id: UUID
+    kind: AlertKind
+    status: AlertStatus
+    message: str
+    task_id: UUID | None
+    dedup_key: str | None
+    created_at: datetime
+    acknowledged_at: datetime | None
+
+
+class TaskTimelineRead(BaseModel):
+    task: TaskRead
+    audit_log: list[AuditLogRead]
+    costs: list[TaskCostRead]
+
+
+class DailyTokenRead(BaseModel):
+    date: str
+    tokens: int
+    cost: Decimal
+
+
+class DashboardMetricsRead(BaseModel):
+    tasks_total: int
+    tasks_published: int
+    tasks_failed: int
+    success_rate: float | None
+    tokens_total: int
+    cost_total: Decimal
+    daily: list[DailyTokenRead]
+    open_alerts: list[AlertRead]
+
+
+class WorkerHealthRead(BaseModel):
+    worker_alive: bool
+    heartbeat_age_seconds: float | None
+    backlog_count: int
+    healthy: bool
+    reason: str | None

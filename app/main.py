@@ -5,7 +5,10 @@ from fastapi import FastAPI, HTTPException, status
 from redis import Redis
 from sqlalchemy import text
 
+from app.api.alerts import router as alerts_router
 from app.api.auth import router as auth_router
+from app.api.costs import router as costs_router
+from app.api.metrics import router as metrics_router
 from app.api.pages import router as pages_router
 from app.api.products import router as products_router
 from app.api.reviews import router as reviews_router
@@ -33,6 +36,9 @@ app.include_router(pages_router, prefix="/api/v1")
 app.include_router(reviews_router, prefix="/api/v1")
 app.include_router(shopify_router, prefix="/api/v1")
 app.include_router(tasks_router, prefix="/api/v1")
+app.include_router(costs_router, prefix="/api/v1")
+app.include_router(alerts_router, prefix="/api/v1")
+app.include_router(metrics_router, prefix="/api/v1")
 
 
 @app.get("/health")

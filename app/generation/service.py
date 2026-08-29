@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import and_, case, or_, select
 
+from app.cost_service import CostService
 from app.database import TenantSession
 from app.domain.draft import DraftStatus
 from app.domain.product import CanonicalProduct, CanonicalVariant, ProductStatus
@@ -166,9 +167,16 @@ class GenerationService:
         product = ProductService(self._session).get(task.product_id)
         canonical = to_canonical_product(product)
         fields = [ProductField(field) for field in task.changed_fields]
-        content = self._workflow.generate(canonical, fields)
-        return DraftService(self._session).create(
+        try:
+            result = self._workflow.generate(canonical, fields)
+        except GenerationError as exc:
+            if exc.usages:
+                CostService(self._session).record(task.id, exc.usages)
+            raise
+        draft = DraftService(self._session).create(
             task,
-            content,
+            result.content,
             RiskLevel(task.risk_level),
         )
+        CostService(self._session).record(task.id, result.usages)
+        return draft

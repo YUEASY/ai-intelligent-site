@@ -11,7 +11,12 @@ from app.domain.product import ProductStatus
 from app.domain.risk import OperationType, ProductField
 from app.domain.snapshot import SnapshotKind
 from app.domain.task_state import TaskState
-from app.generation.model_adapter import GeneratedContent, ModelTier
+from app.generation.model_adapter import (
+    GeneratedContent,
+    ModelInvocation,
+    ModelTier,
+    ModelUsage,
+)
 from app.generation.workflow import ProductWorkflow
 from app.models import Product, ProductDraft, ProductSnapshot, ProductVariant, Task
 from app.platform import (
@@ -44,8 +49,8 @@ class FakeSeoModelAdapter:
         tier: ModelTier,
         product: object,
         fields: frozenset[ProductField],
-    ) -> GeneratedContent:
-        del tier, product
+    ) -> ModelInvocation:
+        del product
         content = GeneratedContent()
         if ProductField.TITLE in fields:
             content.title = "Optimized Classic T-Shirt"
@@ -57,7 +62,15 @@ class FakeSeoModelAdapter:
             content.alt_text = {"front.jpg": "Optimized alt text"}
         if ProductField.SEO_TAGS in fields:
             content.seo_tags = ["optimized", "summer"]
-        return content
+        return ModelInvocation(
+            content=content,
+            usage=ModelUsage(
+                tier=tier,
+                model=f"fake:{tier.value}",
+                input_tokens=1,
+                output_tokens=1,
+            ),
+        )
 
 
 def make_engine() -> Engine:

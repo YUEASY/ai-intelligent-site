@@ -10,11 +10,35 @@ const admin = {
   email: "admin@example.com",
 };
 
+const emptyMetrics = {
+  tasks_total: 0,
+  tasks_published: 0,
+  tasks_failed: 0,
+  success_rate: null,
+  tokens_total: 0,
+  cost_total: "0",
+  daily: [],
+  open_alerts: [],
+};
+
+const emptyCost = {
+  tenant_id: admin.tenant_id,
+  daily_cost: "0",
+  daily_threshold: "6.00",
+  total_cost: "0",
+  total_tokens: 0,
+  tasks: [],
+};
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+function requestUrl(input: string | Request | URL): string {
+  return input instanceof Request ? input.url : input.toString();
 }
 
 async function submitLogin(password = "correct-password") {
@@ -47,12 +71,18 @@ describe("internal admin authentication", () => {
   });
 
   it("logs in with valid credentials and renders the protected shell", async () => {
-    const fetchMock = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        jsonResponse({ access_token: "valid-access-token", token_type: "bearer" }),
-      )
-      .mockResolvedValueOnce(jsonResponse(admin));
+    const fetchMock = vi.fn<typeof fetch>((input) => {
+      const url = requestUrl(input);
+      if (url.endsWith("/auth/login")) {
+        return Promise.resolve(
+          jsonResponse({ access_token: "valid-access-token", token_type: "bearer" }),
+        );
+      }
+      if (url.endsWith("/metrics")) {
+        return Promise.resolve(jsonResponse(emptyMetrics));
+      }
+      return Promise.resolve(jsonResponse(admin));
+    });
     vi.stubGlobal("fetch", fetchMock);
     render(<App />);
 
@@ -87,19 +117,28 @@ describe("internal admin authentication", () => {
     expect(sessionStorage.getItem("ai-site-admin-token")).toBeNull();
   });
 
-  it("renders placeholders and opens the product and review pages", async () => {
+  it("opens the dashboard, task logs, review, product and cost pages", async () => {
     sessionStorage.setItem("ai-site-admin-token", "saved-access-token");
     vi.stubGlobal("fetch", vi.fn<typeof fetch>((input) => {
-      const url = input instanceof Request ? input.url : input.toString();
-      const isList = url.endsWith("/products") || url.endsWith("/reviews/queue");
-      return Promise.resolve(jsonResponse(isList ? [] : admin));
+      const url = requestUrl(input);
+      if (url.endsWith("/metrics")) return Promise.resolve(jsonResponse(emptyMetrics));
+      if (url.endsWith("/tasks")) return Promise.resolve(jsonResponse([]));
+      if (url.endsWith("/reviews/queue")) return Promise.resolve(jsonResponse([]));
+      if (url.endsWith("/products")) return Promise.resolve(jsonResponse([]));
+      if (url.endsWith("/costs")) return Promise.resolve(jsonResponse(emptyCost));
+      if (url.endsWith("/alerts")) return Promise.resolve(jsonResponse([]));
+      return Promise.resolve(jsonResponse(admin));
     }));
     const user = userEvent.setup();
     render(<App />);
     await screen.findByText("运营概览");
+    expect(await screen.findByText("任务总数")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("menuitem", { name: "任务" }));
-    expect(await screen.findByText("任务模块已就绪")).toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "任务日志" }));
+    expect(
+      await screen.findByRole("heading", { name: "任务日志" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("暂无任务")).toBeInTheDocument();
 
     await user.click(screen.getByRole("menuitem", { name: "审核" }));
     expect(
@@ -112,5 +151,11 @@ describe("internal admin authentication", () => {
       await screen.findByRole("heading", { name: "商品列表" }),
     ).toBeInTheDocument();
     expect(screen.getByText("尚未导入商品")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("menuitem", { name: "成本" }));
+    expect(
+      await screen.findByRole("heading", { name: "成本" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("暂无成本记录")).toBeInTheDocument();
   });
 });

@@ -2,7 +2,9 @@ from uuid import UUID
 
 from sqlalchemy import select
 
+from app.alert_service import AlertService
 from app.database import TenantSession
+from app.domain.alert import AlertKind
 from app.domain.risk import RiskLevel, grade_risk
 from app.domain.task_state import TaskState, transition
 from app.models import Task, TaskAuditLog
@@ -67,6 +69,12 @@ class TaskService:
         task = self.advance(task_id, TaskState.FAILED)
         task.last_error = error
         self.session.flush()
+        AlertService(self.session).raise_alert(
+            AlertKind.TASK_FAILED,
+            f"Task {task_id} failed: {error}",
+            dedup_key=f"task:{task_id}",
+            task_id=task_id,
+        )
         return task
 
     def audit_log(self, task_id: UUID) -> list[TaskAuditLog]:

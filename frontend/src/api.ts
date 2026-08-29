@@ -131,6 +131,80 @@ export type RollbackResult = {
   snapshot: ProductSnapshot;
 };
 
+export type TaskCost = {
+  id: string;
+  tenant_id: string;
+  task_id: string;
+  tier: "small" | "large";
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  api_cost: string;
+  created_at: string;
+};
+
+export type AlertKind =
+  | "task_failed"
+  | "dead_letter"
+  | "cost_threshold"
+  | "worker_health";
+
+export type AlertStatus = "open" | "acknowledged";
+
+export type Alert = {
+  id: string;
+  tenant_id: string;
+  kind: AlertKind;
+  status: AlertStatus;
+  message: string;
+  task_id: string | null;
+  dedup_key: string | null;
+  created_at: string;
+  acknowledged_at: string | null;
+};
+
+export type AuditLogEntry = {
+  id: string;
+  tenant_id: string;
+  task_id: string;
+  actor: string;
+  from_status: TaskStatus;
+  to_status: TaskStatus;
+  occurred_at: string;
+};
+
+export type TaskTimeline = {
+  task: Task;
+  audit_log: AuditLogEntry[];
+  costs: TaskCost[];
+};
+
+export type CostOverview = {
+  tenant_id: string;
+  daily_cost: string;
+  daily_threshold: string;
+  total_cost: string;
+  total_tokens: number;
+  tasks: TaskCost[];
+};
+
+export type DailyToken = {
+  date: string;
+  tokens: number;
+  cost: string;
+};
+
+export type DashboardMetrics = {
+  tasks_total: number;
+  tasks_published: number;
+  tasks_failed: number;
+  success_rate: number | null;
+  tokens_total: number;
+  cost_total: string;
+  daily: DailyToken[];
+  open_alerts: Alert[];
+};
+
 export type Task = {
   id: string;
   tenant_id: string;
@@ -385,4 +459,40 @@ export async function rollbackProduct(
     "POST",
     { version },
   );
+}
+
+export async function getTasks(token: string): Promise<Task[]> {
+  return getAuthenticated<Task[]>("/tasks", token);
+}
+
+export async function getTaskTimeline(
+  token: string,
+  taskId: string,
+): Promise<TaskTimeline> {
+  return getAuthenticated<TaskTimeline>(`/tasks/${taskId}/timeline`, token);
+}
+
+export async function getCostOverview(token: string): Promise<CostOverview> {
+  return getAuthenticated<CostOverview>("/costs", token);
+}
+
+export async function getAlerts(token: string): Promise<Alert[]> {
+  return getAuthenticated<Alert[]>("/alerts", token);
+}
+
+export async function acknowledgeAlert(
+  token: string,
+  alertId: string,
+): Promise<Alert> {
+  return authenticatedMutation<Alert>(
+    `/alerts/${alertId}/acknowledge`,
+    token,
+    "POST",
+  );
+}
+
+export async function getDashboardMetrics(
+  token: string,
+): Promise<DashboardMetrics> {
+  return getAuthenticated<DashboardMetrics>("/metrics", token);
 }

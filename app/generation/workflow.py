@@ -7,6 +7,7 @@ and must observe zero calls during this stage.
 """
 
 from collections.abc import Collection
+from dataclasses import dataclass
 
 from app.domain.product import CanonicalProduct
 from app.domain.risk import ProductField
@@ -14,6 +15,7 @@ from app.generation.model_adapter import (
     DeterministicModelAdapter,
     GeneratedContent,
     ModelAdapter,
+    ModelUsage,
     check_facts,
     group_fields_by_tier,
 )
@@ -32,12 +34,25 @@ ALL_CONTENT_FIELDS = frozenset(
 )
 
 
+@dataclass(frozen=True)
+class WorkflowResult:
+    """The merged generated content plus the usage of every model invocation."""
+
+    content: GeneratedContent
+    usages: tuple[ModelUsage, ...]
+
+
 class GenerationError(RuntimeError):
     """Generation produced content that failed a deterministic gate."""
 
-    def __init__(self, message: str, content: GeneratedContent | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        content: GeneratedContent | None = None,
+    ) -> None:
         super().__init__(message)
         self.content = content
+        self.usages: tuple[ModelUsage, ...] = ()
 
 
 class ProductWorkflow:
@@ -57,18 +72,23 @@ class ProductWorkflow:
         self,
         product: CanonicalProduct,
         fields: Collection[ProductField] = ALL_CONTENT_FIELDS,
-    ) -> GeneratedContent:
+    ) -> WorkflowResult:
         requested = frozenset(fields)
         content = GeneratedContent()
+        usages: list[ModelUsage] = []
         for tier, tier_fields in group_fields_by_tier(requested).items():
-            content = _merge(
-                content, self._model_adapter.generate(tier, product, tier_fields)
-            )
+            invocation = self._model_adapter.generate(tier, product, tier_fields)
+            content = _merge(content, invocation.content)
+            usages.append(invocation.usage)
 
-        self._ensure_complete(content, requested)
-        self._enforce_rules(content)
-        self._enforce_facts(content, product)
-        return content
+        try:
+            self._ensure_complete(content, requested)
+            self._enforce_rules(content)
+            self._enforce_facts(content, product)
+        except GenerationError as exc:
+            exc.usages = tuple(usages)
+            raise
+        return WorkflowResult(content=content, usages=tuple(usages))
 
     def _ensure_complete(
         self, content: GeneratedContent, requested: frozenset[ProductField]

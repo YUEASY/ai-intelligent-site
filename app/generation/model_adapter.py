@@ -9,6 +9,7 @@ title go to the small model, and detail copy goes to the large model.
 """
 
 import re
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from typing import Protocol
@@ -59,6 +60,29 @@ class GeneratedContent(BaseModel):
     seo_tags: list[str] | None = None
 
 
+@dataclass(frozen=True)
+class ModelUsage:
+    """Observed usage of one model invocation.
+
+    Tokens are reported by the adapter; the API cost is derived later from a
+    configured price table so pricing stays in one place.  ``tier`` drives the
+    price lookup and ``model`` records the concrete model name for attribution.
+    """
+
+    tier: ModelTier
+    model: str
+    input_tokens: int
+    output_tokens: int
+
+
+@dataclass(frozen=True)
+class ModelInvocation:
+    """A model call's structured output together with its usage."""
+
+    content: GeneratedContent
+    usage: ModelUsage
+
+
 class ModelAdapter(Protocol):
     """Generate content for a single model tier using only real product data."""
 
@@ -67,8 +91,8 @@ class ModelAdapter(Protocol):
         tier: ModelTier,
         product: CanonicalProduct,
         fields: frozenset[ProductField],
-    ) -> GeneratedContent:
-        """Return a partial :class:`GeneratedContent` for exactly `fields`."""
+    ) -> ModelInvocation:
+        """Return a partial result for exactly `fields` with observed usage."""
 
 
 class FactViolation(BaseModel):
@@ -103,11 +127,54 @@ def _seo_tags(product: CanonicalProduct) -> list[str]:
     return sorted({*product.tags, product.category})
 
 
+def _estimate_tokens(text: str) -> int:
+    """Estimate token count from text length without a tokenizer dependency.
+
+    The deterministic adapter never hits a real model, so it approximates
+    usage with a coarse ``len(text) / 4`` heuristic.  A real adapter reports
+    the tokenizer's own counts instead.
+    """
+
+    return max(1, (len(text) + 3) // 4)
+
+
+def _product_text(product: CanonicalProduct) -> str:
+    variant_text = [
+        f"{variant.sku} {variant.price} {variant.inventory}"
+        for variant in product.variants
+    ]
+    return " ".join(
+        [
+            product.title,
+            product.description,
+            product.category,
+            product.meta_title,
+            product.meta_description,
+            *product.tags,
+            *variant_text,
+        ]
+    )
+
+
+def _generated_text(content: GeneratedContent) -> str:
+    parts = [
+        content.title,
+        content.description,
+        content.meta_title,
+        content.meta_description,
+        *(content.seo_tags or []),
+        *(content.alt_text or {}).values(),
+    ]
+    return " ".join(part for part in parts if part)
+
+
 class DeterministicModelAdapter:
     """Fact-safe stand-in for the LLM used in development and tests.
 
     It never calls a model and derives every field from the product's own real
     data, so the factual fields it references are correct by construction.
+    Usage is estimated from the surrounding text so cost attribution stays
+    observable even before a real model adapter is wired in.
     """
 
     def generate(
@@ -115,8 +182,7 @@ class DeterministicModelAdapter:
         tier: ModelTier,
         product: CanonicalProduct,
         fields: frozenset[ProductField],
-    ) -> GeneratedContent:
-        del tier
+    ) -> ModelInvocation:
         content = GeneratedContent()
         if ProductField.TITLE in fields:
             content.title = product.title
@@ -130,7 +196,15 @@ class DeterministicModelAdapter:
             content.alt_text = _alt_texts(product)
         if ProductField.SEO_TAGS in fields:
             content.seo_tags = _seo_tags(product)
-        return content
+        return ModelInvocation(
+            content=content,
+            usage=ModelUsage(
+                tier=tier,
+                model=f"deterministic:{tier.value}",
+                input_tokens=_estimate_tokens(_product_text(product)),
+                output_tokens=_estimate_tokens(_generated_text(content)),
+            ),
+        )
 
 
 def check_facts(

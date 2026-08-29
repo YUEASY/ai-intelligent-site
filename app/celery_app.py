@@ -14,4 +14,14 @@ celery_app.conf.update(
     task_reject_on_worker_lost=True,
     task_track_started=True,
     broker_connection_retry_on_startup=True,
+    beat_schedule={
+        "worker-heartbeat": {
+            "task": "monitor.worker_heartbeat",
+            "schedule": 30.0,
+        },
+        "monitor-health": {
+            "task": "monitor.health",
+            "schedule": 60.0,
+        },
+    },
 )

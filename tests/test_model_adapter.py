@@ -52,7 +52,7 @@ def test_deterministic_adapter_derives_content_from_real_product_data() -> None:
     product = make_product()
     content = DeterministicModelAdapter().generate(
         ModelTier.SMALL, product, CONTENT_FIELDS
-    )
+    ).content
     assert content.title == "Classic T-Shirt"
     assert content.description == "Heavy cotton tee"
     assert content.meta_title == "Classic Cotton T-Shirt"
@@ -68,7 +68,7 @@ def test_deterministic_adapter_fills_only_requested_fields() -> None:
     product = make_product()
     content = DeterministicModelAdapter().generate(
         ModelTier.SMALL, product, frozenset({ProductField.TITLE})
-    )
+    ).content
     assert content.title == "Classic T-Shirt"
     assert content.description is None
     assert content.seo_tags is None

@@ -6,7 +6,8 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base, TenantSession
-from app.models import ShopifyStore, ShopifyWebhookEvent
+from app.domain.alert import AlertKind
+from app.models import Alert, ShopifyStore, ShopifyWebhookEvent
 from app.shopify.types import ShopifyStoreStatus, WebhookEventStatus
 from app.shopify.webhook_service import ShopifyWebhookService, WebhookEventNotFound
 
@@ -147,3 +148,27 @@ def test_processing_unknown_event_raises(
 ) -> None:
     with session_factory() as session, pytest.raises(WebhookEventNotFound):
         ShopifyWebhookService(session).process(uuid4())
+
+
+def test_mark_dead_letter_raises_a_dead_letter_alert(
+    session_factory: Callable[[], TenantSession],
+) -> None:
+    store_id = _create_connected_store(session_factory)
+    event_id = _create_event(
+        session_factory,
+        store_id,
+        "products/update",
+        WebhookEventStatus.RECEIVED,
+    )
+
+    with session_factory() as session:
+        ShopifyWebhookService(session).mark_dead_letter(event_id, "boom")
+        session.commit()
+
+    with session_factory() as session:
+        alert = session.scalar(
+            select(Alert).where(Alert.kind == AlertKind.DEAD_LETTER.value)
+        )
+        assert alert is not None
+        assert str(event_id) in alert.message
+        assert alert.dedup_key == f"webhook:{event_id}"

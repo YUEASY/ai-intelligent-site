@@ -7,7 +7,12 @@ from app.database import Base, TenantSession
 from app.domain.draft import DraftStatus
 from app.domain.risk import ProductField
 from app.domain.task_state import TaskState
-from app.generation.model_adapter import GeneratedContent, ModelTier
+from app.generation.model_adapter import (
+    GeneratedContent,
+    ModelInvocation,
+    ModelTier,
+    ModelUsage,
+)
 from app.generation.workflow import ProductWorkflow
 from app.models import Page, PageDraft, PageSnapshot, Task
 from app.page_publish_service import PagePublishService
@@ -25,9 +30,9 @@ TENANT_ID = UUID("00000000-0000-0000-0000-000000000001")
 class FakePageSeoModel:
     def generate(
         self, tier: ModelTier, product: object, fields: frozenset[ProductField]
-    ) -> GeneratedContent:
-        del tier, product
-        return GeneratedContent(
+    ) -> ModelInvocation:
+        del product
+        content = GeneratedContent(
             title="About Our Studio" if ProductField.TITLE in fields else None,
             meta_title="About Our Sustainable Studio"
             if ProductField.META_TITLE in fields
@@ -38,6 +43,15 @@ class FakePageSeoModel:
             seo_tags=["studio", "sustainable"]
             if ProductField.SEO_TAGS in fields
             else None,
+        )
+        return ModelInvocation(
+            content=content,
+            usage=ModelUsage(
+                tier=tier,
+                model=f"fake:{tier.value}",
+                input_tokens=1,
+                output_tokens=1,
+            ),
         )
 
 

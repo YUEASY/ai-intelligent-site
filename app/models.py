@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -18,6 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base, TenantOwned
+from app.domain.alert import AlertKind, AlertStatus
 from app.domain.draft import DraftStatus
 from app.domain.product import ProductStatus
 from app.domain.snapshot import SnapshotKind
@@ -184,6 +185,86 @@ class TaskAuditLog(TenantOwned, Base):
     to_status: Mapped[str] = mapped_column(String(32), nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class TaskModelUsage(TenantOwned, Base):
+    """One model invocation attributed to a task (model + tokens + API cost)."""
+
+    __tablename__ = "task_model_usages"
+    __table_args__ = (
+        CheckConstraint("input_tokens >= 0", name="ck_task_model_usages_input"),
+        CheckConstraint("output_tokens >= 0", name="ck_task_model_usages_output"),
+        CheckConstraint("api_cost >= 0", name="ck_task_model_usages_cost"),
+        CheckConstraint(
+            "tier IN ('small', 'large')", name="ck_task_model_usages_tier"
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "task_id"],
+            ["tasks.tenant_id", "tasks.id"],
+            ondelete="CASCADE",
+            name="fk_task_model_usages_task",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    task_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
+    tier: Mapped[str] = mapped_column(String(16), nullable=False)
+    model: Mapped[str] = mapped_column(String(255), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    api_cost: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
+
+
+class Alert(TenantOwned, Base):
+    """An operator-facing alert raised by a deterministic code path."""
+
+    __tablename__ = "alerts"
+    __table_args__ = (
+        CheckConstraint(
+            f"kind IN {tuple(kind.value for kind in AlertKind)!r}",
+            name="ck_alerts_kind",
+        ),
+        CheckConstraint(
+            f"status IN {tuple(status.value for status in AlertStatus)!r}",
+            name="ck_alerts_status",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(32), default=AlertStatus.OPEN.value, nullable=False, index=True
+    )
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    task_id: Mapped[UUID | None] = mapped_column(nullable=True, index=True)
+    dedup_key: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class WorkerHeartbeat(Base):
+    """Liveness marker written by the Celery worker (infrastructure-scoped)."""
+
+    __tablename__ = "worker_heartbeats"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    worker_name: Mapped[str] = mapped_column(
+        String(255), nullable=False, unique=True
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
     )
 
 

@@ -3,9 +3,17 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.cost_service import CostService
 from app.dependencies import RequestContext, get_request_context
 from app.domain.task_state import InvalidTaskTransition
-from app.schemas import AuditLogRead, TaskCreate, TaskRead, TaskTransitionRequest
+from app.schemas import (
+    AuditLogRead,
+    TaskCostRead,
+    TaskCreate,
+    TaskRead,
+    TaskTimelineRead,
+    TaskTransitionRequest,
+)
 from app.services import TaskNotFoundError, TaskService
 from app.worker import execute_task
 
@@ -71,3 +79,22 @@ def get_task_audit_log(
     except TaskNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Task not found") from exc
     return [AuditLogRead.model_validate(entry) for entry in entries]
+
+
+@router.get("/{task_id}/timeline", response_model=TaskTimelineRead)
+def get_task_timeline(
+    task_id: UUID,
+    context: Annotated[RequestContext, Depends(get_request_context)],
+) -> TaskTimelineRead:
+    service = _service(context)
+    try:
+        task = service.get(task_id)
+        entries = service.audit_log(task_id)
+    except TaskNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Task not found") from exc
+    costs = CostService(context.session).task_usages_for(task_id)
+    return TaskTimelineRead(
+        task=TaskRead.model_validate(task),
+        audit_log=[AuditLogRead.model_validate(entry) for entry in entries],
+        costs=[TaskCostRead.model_validate(row) for row in costs],
+    )

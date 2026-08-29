@@ -8,6 +8,7 @@ Both paths reuse the publish/snapshot/rollback machinery so every write is
 versioned and rollback-able.
 """
 
+from app.cost_service import CostService
 from app.database import TenantSession
 from app.domain.draft import DraftStatus
 from app.domain.product import CanonicalProduct, ProductStatus
@@ -113,8 +114,10 @@ class SeoService:
         canonical = to_canonical_product(product)
         fields = [ProductField(field) for field in task.changed_fields]
         try:
-            content = self._workflow.generate(canonical, fields)
+            result = self._workflow.generate(canonical, fields)
         except GenerationError as exc:
+            if exc.usages:
+                CostService(self._session).record(task.id, exc.usages)
             if exc.content is not None:
                 DraftService(self._session).create(
                     task,
@@ -125,7 +128,8 @@ class SeoService:
             TaskService(self._session, self._actor).fail(task.id, str(exc))
             self._session.flush()
             return TaskState.FAILED
-        complete = _complete_content(canonical, content)
+        CostService(self._session).record(task.id, result.usages)
+        complete = _complete_content(canonical, result.content)
 
         if RiskLevel(task.risk_level) is RiskLevel.LOW:
             return self._auto_update(task, product, complete, adapter)

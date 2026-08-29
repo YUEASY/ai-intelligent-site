@@ -6,7 +6,9 @@ from app.domain.product import CanonicalProduct
 from app.domain.risk import ProductField
 from app.generation.model_adapter import (
     GeneratedContent,
+    ModelInvocation,
     ModelTier,
+    ModelUsage,
 )
 from app.generation.workflow import (
     ALL_CONTENT_FIELDS,
@@ -40,7 +42,7 @@ class FakeModelAdapter:
         tier: ModelTier,
         product: CanonicalProduct,
         fields: frozenset[ProductField],
-    ) -> GeneratedContent:
+    ) -> ModelInvocation:
         self.calls.append((tier, frozenset(fields)))
         description = None
         if ProductField.DESCRIPTION in fields:
@@ -49,7 +51,7 @@ class FakeModelAdapter:
                 if self._description is not None
                 else product.description
             )
-        return GeneratedContent(
+        content = GeneratedContent(
             title=product.title if ProductField.TITLE in fields else None,
             description=description,
             meta_title=(
@@ -67,6 +69,15 @@ class FakeModelAdapter:
             ),
             seo_tags=product.tags if ProductField.SEO_TAGS in fields else None,
         )
+        return ModelInvocation(
+            content=content,
+            usage=ModelUsage(
+                tier=tier,
+                model=f"fake:{tier.value}",
+                input_tokens=1,
+                output_tokens=1,
+            ),
+        )
 
 
 class IncompleteModelAdapter:
@@ -75,16 +86,24 @@ class IncompleteModelAdapter:
         tier: ModelTier,
         product: CanonicalProduct,
         fields: frozenset[ProductField],
-    ) -> GeneratedContent:
-        del tier, product, fields
-        return GeneratedContent()
+    ) -> ModelInvocation:
+        del product, fields
+        return ModelInvocation(
+            content=GeneratedContent(),
+            usage=ModelUsage(
+                tier=tier,
+                model=f"fake:{tier.value}",
+                input_tokens=0,
+                output_tokens=0,
+            ),
+        )
 
 
 def test_workflow_generates_all_fields_without_platform_writes() -> None:
     product = make_product()
     fake_model = FakeModelAdapter()
     platform = RecordingPlatformAdapter()
-    content = ProductWorkflow(fake_model, platform).generate(product)
+    content = ProductWorkflow(fake_model, platform).generate(product).content
 
     assert content.title == "Classic T-Shirt"
     assert content.description == "Heavy cotton tee"

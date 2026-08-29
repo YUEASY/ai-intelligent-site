@@ -3,7 +3,9 @@ from uuid import UUID
 
 from sqlalchemy import select
 
+from app.alert_service import AlertService
 from app.database import TenantSession
+from app.domain.alert import AlertKind
 from app.models import ShopifyStore, ShopifyWebhookEvent
 from app.shopify.types import ShopifyStoreStatus, WebhookEventStatus
 
@@ -68,6 +70,11 @@ class ShopifyWebhookService:
         event.error_reason = reason[:2000]
         event.processed_at = None
         self._session.flush()
+        AlertService(self._session).raise_alert(
+            AlertKind.DEAD_LETTER,
+            f"Webhook event {event_id} reached the dead letter: {reason}",
+            dedup_key=f"webhook:{event_id}",
+        )
 
     def _get(self, event_id: UUID, *, for_update: bool = False) -> ShopifyWebhookEvent:
         statement = select(ShopifyWebhookEvent).where(
