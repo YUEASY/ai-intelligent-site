@@ -7,12 +7,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.domain.draft import DraftStatus
 from app.domain.product import ProductStatus
+from app.domain.review import RejectionReason
 from app.domain.risk import (
     OperationType,
     ProductField,
     RiskLevel,
     grade_risk,
 )
+from app.domain.snapshot import SnapshotKind
 from app.domain.task_state import TaskState
 
 
@@ -138,5 +140,66 @@ class DraftRead(BaseModel):
     seo_tags: list[str]
     risk_level: RiskLevel
     status: DraftStatus
+    rejection_reason: RejectionReason | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class DraftEditRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = None
+    description: str | None = None
+    meta_title: str | None = None
+    meta_description: str | None = None
+    alt_text: dict[str, str] | None = None
+    seo_tags: list[str] | None = None
+
+
+class ReviewActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    draft_ids: list[UUID] = Field(min_length=1)
+
+
+class RejectRequest(ReviewActionRequest):
+    reason: RejectionReason
+
+
+class PublishRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    confirmed: bool = False
+
+
+class SnapshotRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    product_id: UUID
+    version: int
+    kind: SnapshotKind
+    payload: dict[str, object]
+    field_diff: dict[str, object]
+    actor: str
+    restored_version: int | None
+    created_at: datetime
+
+
+class PublishRead(BaseModel):
+    draft: DraftRead
+    task: TaskRead
+    snapshot: SnapshotRead
+    remote_id: str
+
+
+class RollbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: int = Field(ge=1)
+
+
+class RollbackRead(BaseModel):
+    product: ProductRead
+    task: TaskRead | None
+    snapshot: SnapshotRead

@@ -11,6 +11,10 @@ from fastapi import (
     status,
 )
 
+from app.api.platform_deps import (
+    PlatformAdapterFactory,
+    get_platform_adapter_factory,
+)
 from app.dependencies import RequestContext, get_request_context
 from app.domain.risk import OperationType
 from app.generation.workflow import ALL_CONTENT_FIELDS
@@ -23,14 +27,20 @@ from app.product_service import (
     ProductNotFoundError,
     ProductService,
 )
+from app.publish_service import PublishFailed, PublishService
 from app.schemas import (
     ProductImportRead,
     ProductRead,
+    RollbackRead,
+    RollbackRequest,
+    SnapshotRead,
     TaskCreate,
     TaskKind,
     TaskRead,
 )
 from app.services import TaskService
+from app.shopify.products import NoConnectedShopifyStore
+from app.snapshot_service import SnapshotNotFoundError, SnapshotService
 from app.worker import execute_task
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -130,6 +140,56 @@ def generate_product_content(
     context.session.commit()
     execute_task.delay(str(task.id), str(task.tenant_id))
     return TaskRead.model_validate(task)
+
+
+@router.get("/{product_id}/versions", response_model=list[SnapshotRead])
+def list_product_versions(
+    product_id: UUID,
+    context: Annotated[RequestContext, Depends(get_request_context)],
+) -> list[SnapshotRead]:
+    try:
+        ProductService(context.session).get(product_id)
+    except ProductNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Product not found") from exc
+    snapshots = SnapshotService(context.session).list_versions(product_id)
+    return [SnapshotRead.model_validate(snapshot) for snapshot in snapshots]
+
+
+@router.post("/{product_id}/rollback", response_model=RollbackRead)
+def rollback_product(
+    product_id: UUID,
+    command: RollbackRequest,
+    context: Annotated[RequestContext, Depends(get_request_context)],
+    adapter_factory: Annotated[
+        PlatformAdapterFactory, Depends(get_platform_adapter_factory)
+    ],
+) -> RollbackRead:
+    try:
+        adapter = adapter_factory(context.tenant_id)
+    except NoConnectedShopifyStore as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Shopify store is not connected",
+        ) from exc
+    try:
+        result = PublishService(context.session, context.actor, adapter).rollback(
+            product_id, command.version
+        )
+    except ProductNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Product not found") from exc
+    except SnapshotNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PublishFailed as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Shopify did not confirm the rollback",
+        ) from exc
+    context.session.commit()
+    return RollbackRead(
+        product=ProductRead.model_validate(result.product),
+        task=TaskRead.model_validate(result.task) if result.task else None,
+        snapshot=SnapshotRead.model_validate(result.snapshot),
+    )
 
 
 @router.get("/{product_id}/images/{filename}")

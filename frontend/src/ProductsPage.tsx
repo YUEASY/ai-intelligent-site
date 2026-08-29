@@ -1,7 +1,16 @@
-import { Alert, Button, Card, Drawer, Empty, Space, Spin, Tag, Typography } from "antd";
+import { Alert, Button, Card, Drawer, Empty, Popconfirm, Space, Spin, Tag, Typography } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ApiError, type Product, generateProductDraft, getProducts, importProducts } from "./api";
+import {
+  ApiError,
+  type Product,
+  type ProductSnapshot,
+  generateProductDraft,
+  getProductVersions,
+  getProducts,
+  importProducts,
+  rollbackProduct,
+} from "./api";
 import { withAuthenticatedSession } from "./auth";
 import "./ProductsPage.css";
 
@@ -23,6 +32,8 @@ export default function ProductsPage({
   const [generatingId, setGeneratingId] = useState<string>();
   const [generateNotice, setGenerateNotice] = useState<string>();
   const [generateError, setGenerateError] = useState<string>();
+  const [versions, setVersions] = useState<ProductSnapshot[]>();
+  const [rollbackNotice, setRollbackNotice] = useState<string>();
   const csvInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
 
@@ -62,6 +73,47 @@ export default function ProductsPage({
       );
     } finally {
       setGeneratingId(undefined);
+    }
+  };
+
+  useEffect(() => {
+    const productId = selected?.id;
+    if (!productId) return;
+    let cancelled = false;
+    void withAuthenticatedSession((token) =>
+      getProductVersions(token, productId),
+    )
+      .then((loaded) => {
+        if (!cancelled) setVersions(loaded);
+      })
+      .catch(() => {
+        if (!cancelled) setVersions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.id]);
+
+  const rollbackToVersion = async (version: number) => {
+    if (!selected) return;
+    setRollbackNotice(undefined);
+    try {
+      await withAuthenticatedSession((token) =>
+        rollbackProduct(token, selected.id, version),
+      );
+      setRollbackNotice(`已回滚到版本 ${version}`);
+      await loadProducts();
+      const reloaded = await withAuthenticatedSession((token) =>
+        getProductVersions(token, selected.id),
+      );
+      setVersions(reloaded);
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 401) {
+        onSessionExpired?.();
+      }
+      setRollbackNotice(
+        cause instanceof ApiError ? cause.message : "回滚失败，请稍后重试",
+      );
     }
   };
 
@@ -236,7 +288,15 @@ export default function ProductsPage({
                 <Text>{product.sku}</Text>
                 <Text type="secondary">{product.variants.length} 个变体</Text>
                 <Space wrap>
-                  <Button onClick={() => setSelected(product)}>查看详情</Button>
+                  <Button
+                    onClick={() => {
+                      setSelected(product);
+                      setVersions(undefined);
+                      setRollbackNotice(undefined);
+                    }}
+                  >
+                    查看详情
+                  </Button>
                   <Button
                     type="primary"
                     loading={generatingId === product.id}
@@ -255,7 +315,11 @@ export default function ProductsPage({
         title={selected?.title}
         open={selected !== undefined}
         size="large"
-        onClose={() => setSelected(undefined)}
+        onClose={() => {
+          setSelected(undefined);
+          setVersions(undefined);
+          setRollbackNotice(undefined);
+        }}
       >
         {selected && (
           <Space orientation="vertical" size="large" className="product-detail">
@@ -288,6 +352,48 @@ export default function ProductsPage({
                   </article>
                 ))}
               </div>
+            </div>
+            <div>
+              <Title level={4}>版本历史</Title>
+              {rollbackNotice && (
+                <Alert showIcon type="success" message={rollbackNotice} />
+              )}
+              {versions === undefined ? (
+                <Spin />
+              ) : versions.length === 0 ? (
+                <Text type="secondary">暂无版本快照</Text>
+              ) : (
+                <div className="version-list">
+                  {versions.map((snapshot) => (
+                    <article key={snapshot.id} className="version-card">
+                      <Space direction="vertical" size={4}>
+                        <Space wrap>
+                          <Text strong>版本 {snapshot.version}</Text>
+                          <Tag>{snapshot.kind === "publish" ? "发布" : "回滚"}</Tag>
+                          <Text type="secondary">
+                            {new Date(snapshot.created_at).toLocaleString()}
+                          </Text>
+                        </Space>
+                        <Text type="secondary">操作者 {snapshot.actor}</Text>
+                        {snapshot.restored_version !== null && (
+                          <Text type="secondary">
+                            恢复自版本 {snapshot.restored_version}
+                          </Text>
+                        )}
+                        <Popconfirm
+                          title={`回滚到版本 ${snapshot.version}？`}
+                          description="将整体恢复商品到该版本快照，并写入商户店铺。"
+                          okText="确认回滚"
+                          cancelText="取消"
+                          onConfirm={() => rollbackToVersion(snapshot.version)}
+                        >
+                          <Button size="small">回滚到此版本</Button>
+                        </Popconfirm>
+                      </Space>
+                    </article>
+                  ))}
+                </div>
+              )}
             </div>
           </Space>
         )}

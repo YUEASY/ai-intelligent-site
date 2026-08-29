@@ -20,6 +20,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base, TenantOwned
 from app.domain.draft import DraftStatus
 from app.domain.product import ProductStatus
+from app.domain.snapshot import SnapshotKind
 from app.domain.task_state import TaskState
 from app.shopify.types import ShopifyStoreStatus, WebhookEventStatus
 
@@ -124,6 +125,9 @@ class Product(TenantOwned, Timestamped, Base):
     meta_description: Mapped[str] = mapped_column(Text, nullable=False)
     handle: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    shopify_product_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
     variants: Mapped[list["ProductVariant"]] = relationship(
         back_populates="product",
         cascade="all, delete-orphan",
@@ -234,6 +238,44 @@ class ProductDraft(TenantOwned, Timestamped, Base):
         default=DraftStatus.PENDING_REVIEW.value,
         nullable=False,
         index=True,
+    )
+    rejection_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+
+class ProductSnapshot(TenantOwned, Base):
+    """A versioned, diffable capture of a product's publishable state."""
+
+    __tablename__ = "product_snapshots"
+    __table_args__ = (
+        CheckConstraint(
+            f"kind IN {tuple(kind.value for kind in SnapshotKind)!r}",
+            name="ck_product_snapshots_kind",
+        ),
+        CheckConstraint("version >= 0", name="ck_product_snapshots_version"),
+        ForeignKeyConstraint(
+            ["tenant_id", "product_id"],
+            ["products.tenant_id", "products.id"],
+            ondelete="CASCADE",
+            name="fk_product_snapshots_product",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "product_id",
+            "version",
+            name="uq_product_snapshots_tenant_product_version",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    product_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    field_diff: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    actor: Mapped[str] = mapped_column(String(320), nullable=False)
+    restored_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 

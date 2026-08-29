@@ -35,6 +35,7 @@ def to_canonical_product(product: Product) -> CanonicalProduct:
         meta_description=product.meta_description,
         handle=product.handle,
         status=ProductStatus(product.status),
+        shopify_product_id=product.shopify_product_id,
         variants=[
             CanonicalVariant(
                 sku=variant.sku,

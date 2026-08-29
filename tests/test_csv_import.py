@@ -39,6 +39,7 @@ def test_csv_is_normalized_into_a_canonical_product_with_variants() -> None:
             "meta_description": "Shop our classic cotton T-shirt",
             "handle": "classic-t-shirt",
             "status": "draft",
+            "shopify_product_id": None,
             "variants": [
                 {
                     "sku": "TSHIRT-BLK-S",

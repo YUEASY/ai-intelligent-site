@@ -44,6 +44,7 @@ class CanonicalProduct(BaseModel):
     meta_description: str
     handle: str = Field(min_length=1, max_length=255)
     status: ProductStatus
+    shopify_product_id: str | None = None
     variants: list[CanonicalVariant] = Field(min_length=1)
 
 

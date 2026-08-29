@@ -38,13 +38,15 @@
 }
 
 .product-image-references,
-.variant-list {
+.variant-list,
+.version-list {
   display: grid;
   gap: 12px;
   margin-top: 12px;
 }
 
-.variant-card {
+.variant-card,
+.version-card {
   display: grid;
   gap: 8px;
   padding: 16px;

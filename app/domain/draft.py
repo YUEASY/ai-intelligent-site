@@ -9,5 +9,7 @@ class DraftStatus(StrEnum):
     """
 
     PENDING_REVIEW = "pending_review"
+    APPROVED = "approved"
     PUBLISHED = "published"
     REJECTED = "rejected"
+    ROLLED_BACK = "rolled_back"

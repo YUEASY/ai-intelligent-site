@@ -58,7 +58,19 @@ export type ProductImportResult = {
 };
 
 export type RiskLevel = "low" | "medium" | "high";
-export type DraftStatus = "pending_review" | "published" | "rejected";
+export type DraftStatus =
+  | "pending_review"
+  | "approved"
+  | "published"
+  | "rejected"
+  | "rolled_back";
+export type RejectionReason =
+  | "fact_error"
+  | "expression"
+  | "seo"
+  | "brand_style"
+  | "other";
+export type SnapshotKind = "publish" | "rollback";
 
 export type ReviewDraft = {
   id: string;
@@ -73,8 +85,34 @@ export type ReviewDraft = {
   seo_tags: string[];
   risk_level: RiskLevel;
   status: DraftStatus;
+  rejection_reason: RejectionReason | null;
   created_at: string;
   updated_at: string;
+};
+
+export type ProductSnapshot = {
+  id: string;
+  product_id: string;
+  version: number;
+  kind: SnapshotKind;
+  payload: Record<string, unknown>;
+  field_diff: Record<string, { from: unknown; to: unknown }>;
+  actor: string;
+  restored_version: number | null;
+  created_at: string;
+};
+
+export type PublishResult = {
+  draft: ReviewDraft;
+  task: Task;
+  snapshot: ProductSnapshot;
+  remote_id: string;
+};
+
+export type RollbackResult = {
+  product: Product;
+  task: Task | null;
+  snapshot: ProductSnapshot;
 };
 
 export type Task = {
@@ -144,6 +182,23 @@ async function getAuthenticated<T>(path: string, token: string): Promise<T> {
   return parseResponse<T>(response);
 }
 
+async function authenticatedMutation<T>(
+  path: string,
+  token: string,
+  method: "POST" | "PATCH",
+  body?: unknown,
+): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  return parseResponse<T>(response);
+}
+
 export async function login(
   credentials: LoginCredentials,
 ): Promise<TokenResponse> {
@@ -206,5 +261,97 @@ export async function getShopifyAuthorizationUrl(
   return getAuthenticated<ShopifyAuthorization>(
     `/shopify/oauth/authorize?${query.toString()}`,
     token,
+  );
+}
+
+export async function approveDrafts(
+  token: string,
+  draftIds: string[],
+): Promise<ReviewDraft[]> {
+  return authenticatedMutation<ReviewDraft[]>(
+    "/reviews/approve",
+    token,
+    "POST",
+    { draft_ids: draftIds },
+  );
+}
+
+export async function rejectDrafts(
+  token: string,
+  draftIds: string[],
+  reason: RejectionReason,
+): Promise<ReviewDraft[]> {
+  return authenticatedMutation<ReviewDraft[]>(
+    "/reviews/reject",
+    token,
+    "POST",
+    { draft_ids: draftIds, reason },
+  );
+}
+
+export async function editDraft(
+  token: string,
+  draftId: string,
+  edits: {
+    title?: string;
+    description?: string;
+    meta_title?: string;
+    meta_description?: string;
+    alt_text?: Record<string, string>;
+    seo_tags?: string[];
+  },
+): Promise<ReviewDraft> {
+  return authenticatedMutation<ReviewDraft>(
+    `/reviews/${draftId}`,
+    token,
+    "PATCH",
+    edits,
+  );
+}
+
+export async function regenerateDraft(
+  token: string,
+  draftId: string,
+): Promise<Task> {
+  return authenticatedMutation<Task>(
+    `/reviews/${draftId}/regenerate`,
+    token,
+    "POST",
+  );
+}
+
+export async function publishDraft(
+  token: string,
+  draftId: string,
+  confirmed: boolean,
+): Promise<PublishResult> {
+  return authenticatedMutation<PublishResult>(
+    `/reviews/${draftId}/publish`,
+    token,
+    "POST",
+    { confirmed },
+  );
+}
+
+export async function getProductVersions(
+  token: string,
+  productId: string,
+): Promise<ProductSnapshot[]> {
+  return getAuthenticated<ProductSnapshot[]>(
+    `/products/${productId}/versions`,
+    token,
+  );
+}
+
+export async function rollbackProduct(
+  token: string,
+  productId: string,
+  version: number,
+): Promise<RollbackResult> {
+  return authenticatedMutation<RollbackResult>(
+    `/products/${productId}/rollback`,
+    token,
+    "POST",
+    { version },
   );
 }
