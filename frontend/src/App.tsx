@@ -41,11 +41,11 @@ const { Header, Content, Sider } = Layout;
 const { Text, Title } = Typography;
 
 const navigation = [
-  { key: "overview", icon: <AppstoreOutlined />, label: "概览" },
-  { key: "tasks", icon: <UnorderedListOutlined />, label: "任务" },
-  { key: "reviews", icon: <AuditOutlined />, label: "审核" },
-  { key: "products", icon: <ProductOutlined />, label: "商品" },
-  { key: "shopify", icon: <ShopOutlined />, label: "店铺连接" },
+  { key: "overview", icon: <AppstoreOutlined aria-hidden />, label: "概览" },
+  { key: "tasks", icon: <UnorderedListOutlined aria-hidden />, label: "任务" },
+  { key: "reviews", icon: <AuditOutlined aria-hidden />, label: "审核" },
+  { key: "products", icon: <ProductOutlined aria-hidden />, label: "商品" },
+  { key: "shopify", icon: <ShopOutlined aria-hidden />, label: "店铺连接" },
 ];
 
 const pageCopy: Record<string, { eyebrow: string; title: string; body: string }> = {
