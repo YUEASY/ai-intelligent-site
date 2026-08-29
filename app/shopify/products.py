@@ -15,6 +15,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from app.database import TenantSession
+from app.domain.page import CanonicalPage
 from app.domain.product import CanonicalProduct, ProductStatus
 from app.models import ShopifyStore
 from app.platform import PlatformReceipt
@@ -32,48 +33,48 @@ class ShopifyWriteError(RuntimeError):
     pass
 
 
-def to_shopify_product_payload(product: CanonicalProduct) -> dict[str, object]:
+def to_shopify_product_payload(
+    product: CanonicalProduct, *, include_images: bool = True
+) -> dict[str, object]:
     """Map a canonical product onto Shopify's product create/update JSON."""
-    return {
-        "product": {
-            "title": product.title,
-            "body_html": product.description,
-            "product_type": product.category,
-            "tags": ",".join(product.tags),
-            "handle": product.handle,
-            "status": (
-                "active" if product.status is ProductStatus.ACTIVE else "draft"
-            ),
-            "metafields": [
-                {
-                    "namespace": "global",
-                    "key": "title_tag",
-                    "value": product.meta_title,
-                    "type": "single_line_text_field",
-                },
-                {
-                    "namespace": "global",
-                    "key": "description_tag",
-                    "value": product.meta_description,
-                    "type": "multi_line_text_field",
-                },
-            ],
-            "images": [
-                {"src": image, "alt": product.alt_text.get(image, "")}
-                for image in product.images
-            ],
-            "variants": [
-                {
-                    "sku": variant.sku,
-                    "price": str(variant.price),
-                    "inventory_quantity": variant.inventory,
-                    "option1": _option_values(variant.options, 0),
-                    "option2": _option_values(variant.options, 1),
-                }
-                for variant in product.variants
-            ],
-        }
+    product_payload: dict[str, object] = {
+        "title": product.title,
+        "body_html": product.description,
+        "product_type": product.category,
+        "tags": ",".join(product.tags),
+        "handle": product.handle,
+        "status": ("active" if product.status is ProductStatus.ACTIVE else "draft"),
+        "metafields": [
+            {
+                "namespace": "global",
+                "key": "title_tag",
+                "value": product.meta_title,
+                "type": "single_line_text_field",
+            },
+            {
+                "namespace": "global",
+                "key": "description_tag",
+                "value": product.meta_description,
+                "type": "multi_line_text_field",
+            },
+        ],
+        "variants": [
+            {
+                "sku": variant.sku,
+                "price": str(variant.price),
+                "inventory_quantity": variant.inventory,
+                "option1": _option_values(variant.options, 0),
+                "option2": _option_values(variant.options, 1),
+            }
+            for variant in product.variants
+        ],
     }
+    if include_images:
+        product_payload["images"] = [
+            {"src": image, "alt": product.alt_text.get(image, "")}
+            for image in product.images
+        ]
+    return {"product": product_payload}
 
 
 def _option_values(options: dict[str, str], index: int) -> str:
@@ -91,6 +92,25 @@ class ShopifyProductClient(Protocol):
     ) -> dict[str, Any]: ...
 
     def update_product(
+        self,
+        shop_domain: str,
+        access_token: str,
+        api_version: str,
+        remote_id: str,
+        payload: dict[str, object],
+    ) -> dict[str, Any]: ...
+
+    def update_product_image(
+        self,
+        shop_domain: str,
+        access_token: str,
+        api_version: str,
+        remote_product_id: str,
+        remote_image_id: str,
+        alt: str,
+    ) -> dict[str, Any]: ...
+
+    def update_page(
         self,
         shop_domain: str,
         access_token: str,
@@ -118,6 +138,7 @@ class HttpShopifyProductClient:
             path="products.json",
             method="POST",
             payload=payload,
+            expected_resource="product",
         )
 
     def update_product(
@@ -135,6 +156,44 @@ class HttpShopifyProductClient:
             path=f"products/{remote_id}.json",
             method="PUT",
             payload=payload,
+            expected_resource="product",
+        )
+
+    def update_product_image(
+        self,
+        shop_domain: str,
+        access_token: str,
+        api_version: str,
+        remote_product_id: str,
+        remote_image_id: str,
+        alt: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            shop_domain=shop_domain,
+            access_token=access_token,
+            api_version=api_version,
+            path=f"products/{remote_product_id}/images/{remote_image_id}.json",
+            method="PUT",
+            payload={"image": {"id": remote_image_id, "alt": alt}},
+            expected_resource="image",
+        )
+
+    def update_page(
+        self,
+        shop_domain: str,
+        access_token: str,
+        api_version: str,
+        remote_id: str,
+        payload: dict[str, object],
+    ) -> dict[str, Any]:
+        return self._request(
+            shop_domain=shop_domain,
+            access_token=access_token,
+            api_version=api_version,
+            path=f"pages/{remote_id}.json",
+            method="PUT",
+            payload=payload,
+            expected_resource="page",
         )
 
     def _request(
@@ -146,6 +205,7 @@ class HttpShopifyProductClient:
         path: str,
         method: str,
         payload: dict[str, object],
+        expected_resource: str,
     ) -> dict[str, Any]:
         request = Request(
             f"https://{shop_domain}/admin/api/{api_version}/{path}",
@@ -162,7 +222,7 @@ class HttpShopifyProductClient:
                 body = json.load(response)
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
             raise ShopifyWriteError("Shopify product write failed") from exc
-        if not isinstance(body, dict) or "product" not in body:
+        if not isinstance(body, dict) or expected_resource not in body:
             raise ShopifyWriteError("Shopify returned an unexpected response")
         return body
 
@@ -210,9 +270,82 @@ class ShopifyPlatformAdapter:
                 self._access_token,
                 self._api_version,
                 product.shopify_product_id,
-                to_shopify_product_payload(product),
+                to_shopify_product_payload(product, include_images=False),
             )
+            self._update_image_alt_text(product, body)
             return PlatformReceipt.ok(remote_id=str(body["product"]["id"]))
+        except (ShopifyWriteError, KeyError, TypeError) as exc:
+            return PlatformReceipt.failed(str(exc))
+
+    def _update_image_alt_text(
+        self, product: CanonicalProduct, response: dict[str, Any]
+    ) -> None:
+        if not product.alt_text:
+            return
+        remote_images = response["product"].get("images", [])
+        if not isinstance(remote_images, list):
+            raise ShopifyWriteError("Shopify returned invalid product images")
+        for position, image_url in enumerate(product.images):
+            alt = product.alt_text.get(image_url)
+            if alt is None:
+                continue
+            remote_image = next(
+                (
+                    image
+                    for image in remote_images
+                    if isinstance(image, dict) and image.get("src") == image_url
+                ),
+                remote_images[position] if position < len(remote_images) else None,
+            )
+            if not isinstance(remote_image, dict) or "id" not in remote_image:
+                raise ShopifyWriteError(f"Shopify image id missing for {image_url}")
+            self._client.update_product_image(
+                self._shop_domain,
+                self._access_token,
+                self._api_version,
+                product.shopify_product_id or "",
+                str(remote_image["id"]),
+                alt,
+            )
+
+    def update_page(self, tenant_id: UUID, page: CanonicalPage) -> PlatformReceipt:
+        del tenant_id
+        try:
+            body = self._client.update_page(
+                self._shop_domain,
+                self._access_token,
+                self._api_version,
+                page.shopify_page_id,
+                {
+                    "page": {
+                        "id": page.shopify_page_id,
+                        "title": page.title,
+                        "body_html": page.body_html,
+                        "handle": page.handle,
+                        "metafields": [
+                            {
+                                "namespace": "global",
+                                "key": "title_tag",
+                                "value": page.meta_title,
+                                "type": "single_line_text_field",
+                            },
+                            {
+                                "namespace": "global",
+                                "key": "description_tag",
+                                "value": page.meta_description,
+                                "type": "multi_line_text_field",
+                            },
+                            {
+                                "namespace": "seo",
+                                "key": "tags",
+                                "value": ",".join(page.seo_tags),
+                                "type": "single_line_text_field",
+                            },
+                        ],
+                    }
+                },
+            )
+            return PlatformReceipt.ok(str(body["page"]["id"]))
         except (ShopifyWriteError, KeyError, TypeError) as exc:
             return PlatformReceipt.failed(str(exc))
 

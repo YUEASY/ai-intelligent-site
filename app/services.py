@@ -27,6 +27,7 @@ class TaskService:
             changed_fields=sorted(field.value for field in command.changed_fields),
             risk_level=risk_level.value,
             product_id=command.product_id,
+            page_id=command.page_id,
         )
         self.session.add(task)
         self.session.flush()

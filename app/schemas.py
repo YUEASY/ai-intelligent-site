@@ -47,6 +47,7 @@ class TaskCreate(BaseModel):
     operation_type: OperationType
     changed_fields: set[ProductField] = Field(default_factory=set)
     product_id: UUID | None = None
+    page_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_risk_input(self) -> "TaskCreate":
@@ -66,6 +67,7 @@ class TaskRead(BaseModel):
     status: TaskState
     last_error: str | None
     product_id: UUID | None
+    page_id: UUID | None
     created_at: datetime
     updated_at: datetime
 
@@ -125,6 +127,21 @@ class ProductImportRead(BaseModel):
     products: list[ProductRead]
 
 
+class PageRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tenant_id: UUID
+    title: str
+    body_html: str
+    handle: str
+    meta_title: str
+    meta_description: str
+    seo_tags: list[str]
+    status: str
+    shopify_page_id: str
+
+
 class DraftRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -154,6 +171,26 @@ class DraftEditRequest(BaseModel):
     meta_description: str | None = None
     alt_text: dict[str, str] | None = None
     seo_tags: list[str] | None = None
+    body_html: str | None = None
+
+
+class PageDraftRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tenant_id: UUID
+    page_id: UUID
+    task_id: UUID
+    title: str
+    body_html: str
+    meta_title: str
+    meta_description: str
+    seo_tags: list[str]
+    risk_level: RiskLevel
+    status: DraftStatus
+    rejection_reason: RejectionReason | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 class SeoRequest(BaseModel):
@@ -162,11 +199,29 @@ class SeoRequest(BaseModel):
     include_title: bool = False
 
 
-class ReviewQueueItemRead(DraftRead):
+class ReviewQueueItemRead(BaseModel):
     """A review-queue item enriched with its task kind and lifecycle status."""
 
+    id: UUID
+    tenant_id: UUID
+    product_id: UUID | None = None
+    page_id: UUID | None = None
+    task_id: UUID
+    title: str
+    description: str = ""
+    body_html: str = ""
+    meta_title: str
+    meta_description: str
+    alt_text: dict[str, str] = Field(default_factory=dict)
+    seo_tags: list[str]
+    risk_level: RiskLevel
+    status: DraftStatus
+    rejection_reason: RejectionReason | None = None
+    created_at: datetime
+    updated_at: datetime
     kind: TaskKind
     task_status: TaskState
+    task_error: str | None = None
 
 
 class ReviewActionRequest(BaseModel):
@@ -199,10 +254,24 @@ class SnapshotRead(BaseModel):
     created_at: datetime
 
 
+class PageSnapshotRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    page_id: UUID
+    version: int
+    kind: SnapshotKind
+    payload: dict[str, object]
+    field_diff: dict[str, object]
+    actor: str
+    restored_version: int | None
+    created_at: datetime
+
+
 class PublishRead(BaseModel):
-    draft: DraftRead
+    draft: DraftRead | PageDraftRead
     task: TaskRead
-    snapshot: SnapshotRead
+    snapshot: SnapshotRead | PageSnapshotRead
     remote_id: str
 
 
@@ -216,3 +285,9 @@ class RollbackRead(BaseModel):
     product: ProductRead
     task: TaskRead | None
     snapshot: SnapshotRead
+
+
+class PageRollbackRead(BaseModel):
+    page: PageRead
+    task: TaskRead | None
+    snapshot: PageSnapshotRead

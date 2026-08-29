@@ -6,6 +6,7 @@ from redis import Redis
 from sqlalchemy import text
 
 from app.api.auth import router as auth_router
+from app.api.pages import router as pages_router
 from app.api.products import router as products_router
 from app.api.reviews import router as reviews_router
 from app.api.shopify import router as shopify_router
@@ -28,6 +29,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 app.include_router(auth_router, prefix="/api/v1")
 app.include_router(products_router, prefix="/api/v1")
+app.include_router(pages_router, prefix="/api/v1")
 app.include_router(reviews_router, prefix="/api/v1")
 app.include_router(shopify_router, prefix="/api/v1")
 app.include_router(tasks_router, prefix="/api/v1")

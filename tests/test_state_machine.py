@@ -5,8 +5,11 @@ from app.domain.task_state import InvalidTaskTransition, TaskState, transition
 LEGAL_TRANSITIONS = {
     (TaskState.PENDING, TaskState.RUNNING),
     (TaskState.RUNNING, TaskState.AWAITING_REVIEW),
+    (TaskState.RUNNING, TaskState.SUGGESTED),
     (TaskState.RUNNING, TaskState.PUBLISHED),
     (TaskState.RUNNING, TaskState.FAILED),
+    (TaskState.SUGGESTED, TaskState.PUBLISHED),
+    (TaskState.SUGGESTED, TaskState.FAILED),
     (TaskState.AWAITING_REVIEW, TaskState.APPROVED),
     (TaskState.AWAITING_REVIEW, TaskState.REJECTED),
     (TaskState.APPROVED, TaskState.PUBLISHED),

@@ -35,6 +35,10 @@ ALL_CONTENT_FIELDS = frozenset(
 class GenerationError(RuntimeError):
     """Generation produced content that failed a deterministic gate."""
 
+    def __init__(self, message: str, content: GeneratedContent | None = None) -> None:
+        super().__init__(message)
+        self.content = content
+
 
 class ProductWorkflow:
     """Orchestrates content generation without touching the storefront."""
@@ -72,19 +76,17 @@ class ProductWorkflow:
         # ProductField values mirror GeneratedContent field names, so the
         # requested field's value is its attribute of the same name.
         missing = [
-            field.value
-            for field in requested
-            if getattr(content, field.value) is None
+            field.value for field in requested if getattr(content, field.value) is None
         ]
         if missing:
             raise GenerationError(
-                "model adapter did not produce: " + ", ".join(missing)
+                "model adapter did not produce: " + ", ".join(missing), content
             )
 
     def _enforce_rules(self, content: GeneratedContent) -> None:
         violations = self._validator.validate(content)
         if violations:
-            raise GenerationError(_describe_rule_violations(violations))
+            raise GenerationError(_describe_rule_violations(violations), content)
 
     def _enforce_facts(
         self, content: GeneratedContent, product: CanonicalProduct
@@ -92,7 +94,7 @@ class ProductWorkflow:
         violations = check_facts(content, product)
         if violations:
             raise GenerationError(
-                "; ".join(violation.message for violation in violations)
+                "; ".join(violation.message for violation in violations), content
             )
 
 
@@ -106,8 +108,7 @@ def _describe_rule_violations(
     violations: list[GenerationRuleViolation],
 ) -> str:
     return "; ".join(
-        f"{v.field.value if v.field else 'content'}: {v.message}"
-        for v in violations
+        f"{v.field.value if v.field else 'content'}: {v.message}" for v in violations
     )
 
 

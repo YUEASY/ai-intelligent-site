@@ -4,6 +4,7 @@ from enum import StrEnum
 class TaskState(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
+    SUGGESTED = "suggested"
     AWAITING_REVIEW = "awaiting_review"
     APPROVED = "approved"
     REJECTED = "rejected"
@@ -17,10 +18,12 @@ LEGAL_TRANSITIONS: dict[TaskState, frozenset[TaskState]] = {
     TaskState.RUNNING: frozenset(
         {
             TaskState.AWAITING_REVIEW,
+            TaskState.SUGGESTED,
             TaskState.PUBLISHED,
             TaskState.FAILED,
         }
     ),
+    TaskState.SUGGESTED: frozenset({TaskState.PUBLISHED, TaskState.FAILED}),
     TaskState.AWAITING_REVIEW: frozenset({TaskState.APPROVED, TaskState.REJECTED}),
     TaskState.APPROVED: frozenset({TaskState.PUBLISHED}),
     TaskState.PUBLISHED: frozenset({TaskState.ROLLED_BACK}),

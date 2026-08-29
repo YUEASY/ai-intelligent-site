@@ -7,6 +7,7 @@ import {
   type PublishResult,
   type ReviewDraft,
   type Task,
+  type TaskStatus,
   approveDrafts,
   editDraft,
   getReviewQueue,
@@ -45,7 +46,7 @@ function draft(
   createdAt: string,
   status: ReviewDraft["status"] = "pending_review",
   kind: ReviewDraft["kind"] = "product",
-  taskStatus = "awaiting_review",
+  taskStatus: TaskStatus = "awaiting_review",
 ): ReviewDraft {
   return {
     id,
@@ -325,7 +326,7 @@ describe("ReviewQueuePage", () => {
 
   it("distinguishes the four SEO lifecycle states", async () => {
     mockedGetReviewQueue.mockResolvedValue([
-      draft("suggested", "Suggested", "low", "2024-01-01T00:00:00Z", "pending_review", "seo", "running"),
+      draft("suggested", "Suggested", "low", "2024-01-01T00:00:00Z", "pending_review", "seo", "suggested"),
       draft("awaiting", "Awaiting", "low", "2024-01-01T00:00:01Z", "pending_review", "seo", "awaiting_review"),
       draft("written", "Written", "low", "2024-01-01T00:00:02Z", "published", "seo", "published"),
       draft("failed", "Failed", "low", "2024-01-01T00:00:03Z", "pending_review", "seo", "failed"),
@@ -351,5 +352,19 @@ describe("ReviewQueuePage", () => {
     expect(screen.queryByRole("button", { name: /发\s*布/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /编\s*辑/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it("shows the asynchronous SEO failure reason", async () => {
+    mockedGetReviewQueue.mockResolvedValue([
+      {
+        ...draft("failed", "Failed", "low", "2024-01-01T00:00:00Z", "pending_review", "seo", "failed"),
+        task_error: "meta_title: banned word 'fake' present",
+      },
+    ]);
+
+    render(<ReviewQueuePage />);
+
+    expect(await screen.findByText("SEO 规则校验或写入失败")).toBeInTheDocument();
+    expect(screen.getByText(/banned word 'fake'/)).toBeInTheDocument();
   });
 });

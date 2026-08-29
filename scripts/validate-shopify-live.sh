@@ -184,11 +184,22 @@ finish() {
 # Replace the example below. Set TOTAL_STAGES to match the stages you write.
 # ──────────────────────────────────────────────────────────────────────────
 
-TOTAL_STAGES=6
+TOTAL_STAGES=10
 
 TENANT_ID="00000000-0000-0000-0000-000000000001"
 STORE_DOMAIN="ai-intelligent-site-test.myshopify.com"
 INGRESS_URL="http://localhost:8000/api/v1/shopify/webhooks/ingress/$TENANT_ID"
+
+# Git Bash may not expose explorer.exe/xdg-open reliably. Prefer the native
+# Windows browser launcher when PowerShell is available.
+if command -v powershell.exe >/dev/null 2>&1; then
+  open_url() {
+    local url="$1"
+    printf '  %s↗ opening%s %s\n' "$GREEN" "$RESET" "$url"
+    powershell.exe -NoProfile -Command "Start-Process -FilePath '$url'" \
+      >/dev/null 2>&1 || warn "couldn't open a browser, so visit it manually: $url"
+  }
+fi
 
 if [[ ! -f compose.yaml ]]; then
   printf 'Run this wizard from the repository root (compose.yaml was not found).\n' >&2
@@ -323,6 +334,60 @@ if second[0] != 200 or second[1].get("status") != "duplicate":
 PY
 say "✓ valid HMAC was accepted and the duplicate returned 200 duplicate"
 pause "Press Enter to continue."
+
+stage "SEO baseline on a real product"
+say "Choose one local product that has already been published to the Development Store."
+psql_query "SELECT id, title, status, shopify_product_id FROM products WHERE shopify_product_id IS NOT NULL ORDER BY updated_at DESC LIMIT 10;"
+PUBLISHED_PRODUCT_COUNT=$(docker compose exec -T postgres psql -U postgres -d ai_site -At -c "SELECT count(*) FROM products WHERE shopify_product_id IS NOT NULL;" | tr -d '\r')
+if [[ "$PUBLISHED_PRODUCT_COUNT" == "0" ]]; then
+  warn "No local product is mapped to a real Shopify product yet."
+  open_url "http://localhost:3000"
+  step "Open 审核队列, select one demo product draft, then choose 通过 → 发布 → 确认发布."
+  pause "Press Enter after the UI reports that Shopify confirmed the publish."
+  psql_query "SELECT id, title, status, shopify_product_id FROM products WHERE shopify_product_id IS NOT NULL ORDER BY updated_at DESC LIMIT 10;"
+  PUBLISHED_PRODUCT_COUNT=$(docker compose exec -T postgres psql -U postgres -d ai_site -At -c "SELECT count(*) FROM products WHERE shopify_product_id IS NOT NULL;" | tr -d '\r')
+  if [[ "$PUBLISHED_PRODUCT_COUNT" == "0" ]]; then
+    warn "No Shopify product mapping was created; stop and resolve the publish failure before validation."
+    exit 1
+  fi
+fi
+open_url "http://localhost:3000"
+step "Open 商品, choose that published product, and open its version history."
+open_url "https://admin.shopify.com/store/ai-intelligent-site-test/products"
+step "Open the matching Shopify product and record Title, website SEO title/description, tags, and the first image Alt text."
+confirm "Do the local product and Shopify product refer to the same item?" || { warn "product mapping must be correct before SEO validation"; exit 1; }
+pause "Keep both product pages open, then press Enter."
+
+stage "Low-risk SEO auto-write"
+open_url "http://localhost:3000"
+step "On the published product, click SEO 优化 (not SEO 标题优化)."
+step "Open 审核队列 and wait until the SEO item shows 已写入 Shopify."
+open_url "https://admin.shopify.com/store/ai-intelligent-site-test/products"
+step "Refresh the matching Shopify product. Verify website SEO title/description, tags, and image Alt changed to the generated suggestion."
+confirm "Did low-risk SEO write automatically to Shopify?" || { warn "low-risk remote write validation failed"; exit 1; }
+step "Back in the local product version history, identify the new publish snapshot. Its payload is the pre-SEO baseline used later for rollback."
+pause "Record that snapshot version, then press Enter."
+
+stage "Title waits for human review"
+open_url "http://localhost:3000"
+step "On the same product, click SEO 标题优化."
+step "Open 审核队列 and wait until the item shows 等待审核. Do not approve it yet."
+open_url "https://admin.shopify.com/store/ai-intelligent-site-test/products"
+step "Refresh the matching Shopify product and verify its Title has not changed."
+confirm "Is the remote Title unchanged before approval?" || { warn "medium-risk review gate validation failed"; exit 1; }
+step "Return to 审核队列, approve the title draft, click 发布, and confirm the high-risk prompt."
+step "Refresh Shopify and verify the approved Title is now present."
+confirm "Did Shopify change only after approval and explicit publish?" || { warn "reviewed title publish validation failed"; exit 1; }
+
+stage "SEO snapshot rollback"
+open_url "http://localhost:3000"
+step "Open the same product's version history."
+step "Rollback to the publish snapshot recorded before the low-risk SEO write, and confirm the rollback prompt."
+open_url "https://admin.shopify.com/store/ai-intelligent-site-test/products"
+step "Refresh the matching Shopify product and verify Title, website SEO fields, tags, and image Alt match the recorded baseline."
+confirm "Did a fresh Shopify read confirm the baseline was restored?" || { warn "remote rollback validation failed"; exit 1; }
+say "✓ Issue #17 Shopify validation passed: remote baseline, risk gate, write, and rollback were observed."
+pause "Record evidence in issue #17, then press Enter."
 
 stage "Uninstall and disconnected state"
 warn "This stage uninstalls the app from the development store and revokes its token."

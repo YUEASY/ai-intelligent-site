@@ -58,9 +58,13 @@ class RollbackResult:
     snapshot: ProductSnapshot
 
 
-def canonical_from_state(
-    product: Product, state: dict[str, Any]
-) -> CanonicalProduct:
+@dataclass(frozen=True)
+class ProductWriteResult:
+    snapshot: ProductSnapshot
+    receipt: PlatformReceipt
+
+
+def canonical_from_state(product: Product, state: dict[str, Any]) -> CanonicalProduct:
     """Rebuild a canonical product from a serialized product state."""
     return CanonicalProduct(
         tenant_id=product.tenant_id,
@@ -84,9 +88,7 @@ def canonical_from_state(
                 options=dict(variant["options"]),
                 price=Decimal(variant["price"]),
                 cost=(
-                    Decimal(variant["cost"])
-                    if variant["cost"] is not None
-                    else None
+                    Decimal(variant["cost"]) if variant["cost"] is not None else None
                 ),
                 inventory=int(variant["inventory"]),
                 image=variant["image"],
@@ -94,6 +96,41 @@ def canonical_from_state(
             for variant in state["variants"]
         ],
     )
+
+
+def write_product_state(
+    session: TenantSession,
+    actor: str,
+    adapter: PlatformAdapter,
+    product: Product,
+    before: dict[str, Any],
+    after: dict[str, Any],
+    *,
+    kind: SnapshotKind = SnapshotKind.PUBLISH,
+    restored_version: int | None = None,
+) -> ProductWriteResult:
+    """Capture a snapshot, write the storefront, then apply confirmed state."""
+    snapshot = SnapshotService(session).capture(
+        product,
+        before=before,
+        after=after,
+        actor=actor,
+        kind=kind,
+        restored_version=restored_version,
+    )
+    canonical = canonical_from_state(product, after)
+    receipt = (
+        adapter.publish_product(session.tenant_id, canonical)
+        if product.shopify_product_id is None
+        else adapter.update_product(session.tenant_id, canonical)
+    )
+    if not receipt.success:
+        session.delete(snapshot)
+        return ProductWriteResult(snapshot, receipt)
+    apply_state_to_product(product, after)
+    if receipt.remote_id:
+        product.shopify_product_id = receipt.remote_id
+    return ProductWriteResult(snapshot, receipt)
 
 
 class PublishService:
@@ -120,25 +157,13 @@ class PublishService:
         before = product_state(product)
         after = apply_draft_to_state(before, draft)
         after["status"] = ProductStatus.ACTIVE.value
-        canonical = canonical_from_state(product, after)
-
-        snapshot = SnapshotService(self._session).capture(
-            product,
-            before=before,
-            after=after,
-            actor=self._actor,
-            kind=SnapshotKind.PUBLISH,
+        write = write_product_state(
+            self._session, self._actor, self._adapter, product, before, after
         )
-
-        receipt = self._write(product, canonical)
+        snapshot, receipt = write.snapshot, write.receipt
         if not receipt.success:
-            self._session.delete(snapshot)
             raise PublishFailed(receipt.error or "Shopify did not confirm the publish")
-
-        apply_state_to_product(product, after)
         product.status = ProductStatus.ACTIVE.value
-        if receipt.remote_id:
-            product.shopify_product_id = receipt.remote_id
 
         task_service.advance(draft.task_id, TaskState.PUBLISHED)
         draft.status = DraftStatus.PUBLISHED.value
@@ -157,25 +182,19 @@ class PublishService:
 
         before = product_state(product)
         after = dict(target.payload)
-        canonical = canonical_from_state(product, after)
-
-        snapshot = snapshots.capture(
+        write = write_product_state(
+            self._session,
+            self._actor,
+            self._adapter,
             product,
-            before=before,
-            after=after,
-            actor=self._actor,
+            before,
+            after,
             kind=SnapshotKind.ROLLBACK,
             restored_version=version,
         )
-
-        receipt = self._write(product, canonical)
+        snapshot, receipt = write.snapshot, write.receipt
         if not receipt.success:
-            self._session.delete(snapshot)
-            raise PublishFailed(
-                receipt.error or "Shopify did not confirm the rollback"
-            )
-
-        apply_state_to_product(product, after)
+            raise PublishFailed(receipt.error or "Shopify did not confirm the rollback")
 
         task = self._latest_published_task(product_id)
         if task is not None:
@@ -186,17 +205,6 @@ class PublishService:
 
         self._session.flush()
         return RollbackResult(product=product, task=task, snapshot=snapshot)
-
-    def _write(
-        self, product: Product, canonical: CanonicalProduct
-    ) -> PlatformReceipt:
-        if product.shopify_product_id is None:
-            return self._adapter.publish_product(
-                self._session.tenant_id, canonical
-            )
-        return self._adapter.update_product(
-            self._session.tenant_id, canonical
-        )
 
     def _get_draft(self, draft_id: UUID) -> ProductDraft:
         draft = self._session.scalar(

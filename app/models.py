@@ -53,7 +53,8 @@ class Task(TenantOwned, Timestamped, Base):
     __tablename__ = "tasks"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'running', 'awaiting_review', 'approved', "
+            "status IN ('pending', 'running', 'suggested', "
+            "'awaiting_review', 'approved', "
             "'rejected', 'published', 'failed', 'rolled_back')",
             name="ck_tasks_status",
         ),
@@ -74,6 +75,95 @@ class Task(TenantOwned, Timestamped, Base):
     )
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     product_id: Mapped[UUID | None] = mapped_column(nullable=True, index=True)
+    page_id: Mapped[UUID | None] = mapped_column(nullable=True, index=True)
+
+
+class Page(TenantOwned, Timestamped, Base):
+    __tablename__ = "pages"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'active', 'archived')", name="ck_pages_status"
+        ),
+        UniqueConstraint("tenant_id", "handle", name="uq_pages_tenant_handle"),
+        UniqueConstraint("tenant_id", "id", name="uq_pages_tenant_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body_html: Mapped[str] = mapped_column(Text, nullable=False)
+    handle: Mapped[str] = mapped_column(String(255), nullable=False)
+    meta_title: Mapped[str] = mapped_column(String(255), nullable=False)
+    meta_description: Mapped[str] = mapped_column(Text, nullable=False)
+    seo_tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    shopify_page_id: Mapped[str] = mapped_column(String(255), nullable=False)
+
+
+class PageDraft(TenantOwned, Timestamped, Base):
+    __tablename__ = "page_drafts"
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN {tuple(status.value for status in DraftStatus)!r}",
+            name="ck_page_drafts_status",
+        ),
+        CheckConstraint(
+            "risk_level IN ('low', 'medium', 'high')",
+            name="ck_page_drafts_risk_level",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "page_id"],
+            ["pages.tenant_id", "pages.id"],
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "task_id"],
+            ["tasks.tenant_id", "tasks.id"],
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("tenant_id", "id", name="uq_page_drafts_tenant_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    page_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
+    task_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body_html: Mapped[str] = mapped_column(Text, nullable=False)
+    meta_title: Mapped[str] = mapped_column(String(255), nullable=False)
+    meta_description: Mapped[str] = mapped_column(Text, nullable=False)
+    seo_tags: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    risk_level: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    rejection_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+
+class PageSnapshot(TenantOwned, Base):
+    __tablename__ = "page_snapshots"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "page_id"],
+            ["pages.tenant_id", "pages.id"],
+            ondelete="CASCADE",
+            name="fk_page_snapshots_page",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "page_id",
+            "version",
+            name="uq_page_snapshots_tenant_page_version",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    page_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    field_diff: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    actor: Mapped[str] = mapped_column(String(320), nullable=False)
+    restored_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class TaskAuditLog(TenantOwned, Base):
@@ -126,9 +216,7 @@ class Product(TenantOwned, Timestamped, Base):
     alt_text: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict)
     handle: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
-    shopify_product_id: Mapped[str | None] = mapped_column(
-        String(255), nullable=True
-    )
+    shopify_product_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     variants: Mapped[list["ProductVariant"]] = relationship(
         back_populates="product",
         cascade="all, delete-orphan",
@@ -146,9 +234,7 @@ class ProductVariant(TenantOwned, Timestamped, Base):
     __tablename__ = "product_variants"
     __table_args__ = (
         CheckConstraint("price >= 0", name="ck_product_variants_price"),
-        CheckConstraint(
-            "cost IS NULL OR cost >= 0", name="ck_product_variants_cost"
-        ),
+        CheckConstraint("cost IS NULL OR cost >= 0", name="ck_product_variants_cost"),
         CheckConstraint("inventory >= 0", name="ck_product_variants_inventory"),
         ForeignKeyConstraint(
             ["tenant_id", "product_id"],
@@ -156,9 +242,7 @@ class ProductVariant(TenantOwned, Timestamped, Base):
             ondelete="CASCADE",
             name="fk_product_variants_product",
         ),
-        UniqueConstraint(
-            "tenant_id", "sku", name="uq_product_variants_tenant_sku"
-        ),
+        UniqueConstraint("tenant_id", "sku", name="uq_product_variants_tenant_sku"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)

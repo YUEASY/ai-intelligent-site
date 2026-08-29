@@ -61,7 +61,8 @@ function seoStatusOf(draft: ReviewDraft): SeoStatus | null {
   if (draft.task_status === "failed") return "write_failed";
   if (draft.status === "published") return "written";
   if (draft.task_status === "awaiting_review") return "awaiting_review";
-  return "suggested";
+  if (draft.task_status === "suggested") return "suggested";
+  return "awaiting_review";
 }
 
 type Notice = { type: "success" | "error"; message: string };
@@ -147,6 +148,7 @@ export default function ReviewQueuePage({
   const submitEdit = async (values: {
     title?: string;
     description?: string;
+    body_html?: string;
     meta_title?: string;
     meta_description?: string;
     seo_tags?: string;
@@ -306,6 +308,14 @@ export default function ReviewQueuePage({
                       )}
                     </Space>
                   )}
+                  {draft.task_status === "failed" && draft.task_error && (
+                    <Alert
+                      showIcon
+                      type="error"
+                      message="SEO 规则校验或写入失败"
+                      description={draft.task_error}
+                    />
+                  )}
                   {draft.seo_tags.length > 0 && (
                     <Space wrap>
                       {draft.seo_tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
@@ -373,6 +383,7 @@ export default function ReviewQueuePage({
               ? {
                   title: editing.title,
                   description: editing.description,
+                  body_html: editing.body_html,
                   meta_title: editing.meta_title,
                   meta_description: editing.meta_description,
                   seo_tags: editing.seo_tags.join(", "),
@@ -384,7 +395,10 @@ export default function ReviewQueuePage({
           <Form.Item label="标题" name="title">
             <Input />
           </Form.Item>
-          <Form.Item label="描述" name="description">
+          <Form.Item
+            label={editing?.page_id ? "页面正文" : "描述"}
+            name={editing?.page_id ? "body_html" : "description"}
+          >
             <Input.TextArea rows={4} />
           </Form.Item>
           <Form.Item label="Meta 标题" name="meta_title">

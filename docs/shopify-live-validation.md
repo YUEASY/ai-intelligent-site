@@ -66,6 +66,21 @@ FROM shopify_stores;
 - [ ] 用错误 `X-Shopify-Hmac-Sha256` 重放同一 body → 返回 401，且不落库、不入队。
 - [ ] 用相同 `X-Shopify-Webhook-Id` 再次投递 → 返回 200（`status: duplicate`），表中仍只有一行。
 
+## Issue #17：SEO 自动写入、审核门槛与远端回滚
+
+在卸载 App 前运行以下验证；推荐直接执行仓库向导：
+
+```bash
+bash scripts/validate-shopify-live.sh
+```
+
+- [ ] 选定一个已发布且 `shopify_product_id` 非空的本地商品，在 Shopify 后台记录 Title、网站 SEO 标题/描述、Tags 和首图 Alt 原值。
+- [ ] 点击「SEO 优化」后，审核队列显示「已写入 Shopify」；刷新 Shopify 后上述低风险字段与建议一致。
+- [ ] 点击「SEO 标题优化」后，审核前刷新 Shopify，Title 保持不变；通过审核并明确确认发布后，Title 才发生变化。
+- [ ] 在本地版本历史中回滚到低风险 SEO 写入前的 publish 快照；重新读取 Shopify 后，Title、Meta、Tags 与 Alt 恢复为记录的原值。
+
+建议在 Issue #17 留下商品的本地 UUID、Shopify Product ID、快照版本、任务 ID 与验证时间；不要粘贴访问令牌。
+
 ## 6. 撤销 / 卸载 → 连接状态
 
 - [ ] 在 Development Store 卸载 App（或撤销权限），触发 `app/uninstalled`。

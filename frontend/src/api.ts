@@ -40,6 +40,7 @@ export type Product = {
   sku: string;
   title: string;
   description: string;
+  body_html?: string;
   category: string;
   tags: string[];
   images: string[];
@@ -71,14 +72,26 @@ export type RejectionReason =
   | "brand_style"
   | "other";
 export type SnapshotKind = "publish" | "rollback";
+export type TaskStatus =
+  | "pending"
+  | "running"
+  | "suggested"
+  | "awaiting_review"
+  | "approved"
+  | "rejected"
+  | "published"
+  | "failed"
+  | "rolled_back";
 
 export type ReviewDraft = {
   id: string;
   tenant_id: string;
-  product_id: string;
+  product_id: string | null;
+  page_id?: string | null;
   task_id: string;
   title: string;
   description: string;
+  body_html?: string;
   meta_title: string;
   meta_description: string;
   alt_text: Record<string, string>;
@@ -87,7 +100,8 @@ export type ReviewDraft = {
   status: DraftStatus;
   rejection_reason: RejectionReason | null;
   kind: "product" | "seo";
-  task_status: string;
+  task_status: TaskStatus;
+  task_error?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -124,9 +138,10 @@ export type Task = {
   operation_type: string;
   changed_fields: string[];
   risk_level: RiskLevel;
-  status: string;
+  status: TaskStatus;
   last_error: string | null;
   product_id: string | null;
+  page_id?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -310,6 +325,7 @@ export async function editDraft(
   edits: {
     title?: string;
     description?: string;
+    body_html?: string;
     meta_title?: string;
     meta_description?: string;
     alt_text?: Record<string, string>;

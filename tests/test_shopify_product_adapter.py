@@ -1,4 +1,6 @@
 from decimal import Decimal
+from io import BytesIO
+from unittest.mock import patch
 from uuid import UUID
 
 from sqlalchemy import create_engine
@@ -9,6 +11,7 @@ from app.domain.product import CanonicalProduct, CanonicalVariant, ProductStatus
 from app.models import ShopifyStore
 from app.shopify.oauth import TokenCipher, _associated_data
 from app.shopify.products import (
+    HttpShopifyProductClient,
     ShopifyPlatformAdapter,
     ShopifyPlatformAdapterFactory,
     ShopifyWriteError,
@@ -76,7 +79,47 @@ class FakeShopifyProductClient:
         self.calls.append(("update", remote_id, payload))
         if self._fail:
             raise ShopifyWriteError("storefront unavailable")
-        return {"product": {"id": int(remote_id)}}
+        return {
+            "product": {
+                "id": int(remote_id),
+                "images": [{"id": 987, "src": "shopify-front.jpg"}],
+            }
+        }
+
+    def update_product_image(
+        self,
+        shop_domain: str,
+        access_token: str,
+        api_version: str,
+        remote_product_id: str,
+        remote_image_id: str,
+        alt: str,
+    ) -> dict[str, object]:
+        self.calls.append(
+            (
+                "update_image",
+                remote_image_id,
+                {"product_id": remote_product_id, "alt": alt},
+            )
+        )
+        if self._fail:
+            raise ShopifyWriteError("storefront unavailable")
+        return {"image": {"id": int(remote_image_id), "alt": alt}}
+
+
+def test_http_client_accepts_shopify_image_update_receipt() -> None:
+    response = BytesIO(b'{"image":{"id":987,"alt":"Optimized alt text"}}')
+    with patch("app.shopify.products.urlopen", return_value=response):
+        body = HttpShopifyProductClient().update_product_image(
+            "merchant.myshopify.com",
+            "test-token",
+            "2026-07",
+            "12345",
+            "987",
+            "Optimized alt text",
+        )
+
+    assert body["image"]["id"] == 987
 
 
 def test_payload_maps_canonical_fields_to_shopify() -> None:
@@ -157,6 +200,29 @@ def test_update_without_remote_id_fails() -> None:
     receipt = adapter.update_product(TENANT_ID, make_product(remote_id=None))
 
     assert receipt.success is False
+
+
+def test_update_targets_existing_shopify_image_id_for_alt_text() -> None:
+    client = FakeShopifyProductClient()
+    adapter = ShopifyPlatformAdapter(
+        shop_domain="merchant.myshopify.com",
+        access_token="shpat_token",
+        api_version="2026-07",
+        client=client,
+    )
+    product = make_product(remote_id="12345")
+    product.alt_text = {"front.jpg": "Optimized alt text"}
+
+    receipt = adapter.update_product(TENANT_ID, product)
+
+    assert receipt.success is True
+    assert client.calls[0][0] == "update"
+    assert "images" not in client.calls[0][2]["product"]
+    assert client.calls[1] == (
+        "update_image",
+        "987",
+        {"product_id": "12345", "alt": "Optimized alt text"},
+    )
 
 
 def test_factory_decrypts_token_and_builds_store_adapter() -> None:

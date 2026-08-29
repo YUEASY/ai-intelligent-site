@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 from uuid import UUID
 
+from app.domain.page import CanonicalPage
 from app.domain.product import CanonicalProduct
 
 
@@ -48,6 +49,9 @@ class PlatformAdapter(Protocol):
     ) -> PlatformReceipt:
         """Update an existing storefront product from a canonical product."""
 
+    def update_page(self, tenant_id: UUID, page: CanonicalPage) -> PlatformReceipt:
+        """Update an existing storefront content page."""
+
 
 @dataclass
 class RecordingPlatformAdapter:
@@ -57,7 +61,7 @@ class RecordingPlatformAdapter:
     and to drive publish/rollback behaviour deterministically.
     """
 
-    write_calls: list[tuple[str, UUID, CanonicalProduct]] = field(
+    write_calls: list[tuple[str, UUID, CanonicalProduct | CanonicalPage]] = field(
         default_factory=list
     )
     receipts: list[PlatformReceipt] = field(default_factory=list)
@@ -72,6 +76,10 @@ class RecordingPlatformAdapter:
         self, tenant_id: UUID, product: CanonicalProduct
     ) -> PlatformReceipt:
         self.write_calls.append(("update_product", tenant_id, product))
+        return self._next_receipt()
+
+    def update_page(self, tenant_id: UUID, page: CanonicalPage) -> PlatformReceipt:
+        self.write_calls.append(("update_page", tenant_id, page))
         return self._next_receipt()
 
     def _next_receipt(self) -> PlatformReceipt:
@@ -97,4 +105,8 @@ class NoopPlatformAdapter:
         self, tenant_id: UUID, product: CanonicalProduct
     ) -> PlatformReceipt:
         del tenant_id, product
+        return PlatformReceipt.ok(remote_id="noop")
+
+    def update_page(self, tenant_id: UUID, page: CanonicalPage) -> PlatformReceipt:
+        del tenant_id, page
         return PlatformReceipt.ok(remote_id="noop")

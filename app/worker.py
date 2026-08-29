@@ -13,6 +13,7 @@ from app.domain.task_state import InvalidTaskTransition, TaskState
 from app.generation.service import GenerationService
 from app.generation.workflow import GenerationError
 from app.models import Task
+from app.page_seo_service import PageSeoService
 from app.platform import PlatformAdapter
 from app.product_service import ProductNotFoundError
 from app.schemas import TaskKind
@@ -78,8 +79,8 @@ def _run_seo_workflow(
     service: TaskService,
     adapter_factory: Callable[[UUID], PlatformAdapter] | None,
 ) -> str:
-    if task.product_id is None:
-        service.fail(task.id, "SEO task has no product to optimize")
+    if task.product_id is None and task.page_id is None:
+        service.fail(task.id, "SEO task has no product or page to optimize")
         return TaskState.FAILED.value
 
     try:
@@ -89,8 +90,15 @@ def _run_seo_workflow(
         return TaskState.FAILED.value
 
     try:
+        if task.page_id is not None:
+            return PageSeoService(session, SYSTEM_ACTOR).run(task, adapter).value
         return SeoService(session, SYSTEM_ACTOR).run(task, adapter).value
-    except (SeoProductNotPublished, GenerationError, ProductNotFoundError) as exc:
+    except (
+        SeoProductNotPublished,
+        GenerationError,
+        ProductNotFoundError,
+        ValueError,
+    ) as exc:
         service.fail(task.id, str(exc))
         return TaskState.FAILED.value
 

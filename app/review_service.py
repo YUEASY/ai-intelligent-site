@@ -17,7 +17,8 @@ from app.domain.risk import OperationType
 from app.domain.task_state import TaskState
 from app.generation.service import DraftNotFoundError
 from app.generation.workflow import ALL_CONTENT_FIELDS
-from app.models import ProductDraft, Task
+from app.models import PageDraft, ProductDraft, Task
+from app.page_seo_service import PAGE_SEO_ALL_FIELDS
 from app.schemas import DraftEditRequest, TaskCreate, TaskKind
 from app.services import TaskService
 
@@ -31,7 +32,7 @@ class ReviewService:
         self._session = session
         self._actor = actor
 
-    def approve(self, draft_ids: Collection[UUID]) -> list[ProductDraft]:
+    def approve(self, draft_ids: Collection[UUID]) -> list[ProductDraft | PageDraft]:
         drafts = self._reviewable_drafts(draft_ids)
         task_service = TaskService(self._session, self._actor)
         for draft in drafts:
@@ -42,7 +43,7 @@ class ReviewService:
 
     def reject(
         self, draft_ids: Collection[UUID], reason: RejectionReason
-    ) -> list[ProductDraft]:
+    ) -> list[ProductDraft | PageDraft]:
         drafts = self._reviewable_drafts(draft_ids)
         task_service = TaskService(self._session, self._actor)
         for draft in drafts:
@@ -52,14 +53,13 @@ class ReviewService:
         self._session.flush()
         return drafts
 
-    def edit(self, draft_id: UUID, edits: DraftEditRequest) -> ProductDraft:
+    def edit(self, draft_id: UUID, edits: DraftEditRequest) -> ProductDraft | PageDraft:
         draft = self._get(draft_id)
         if draft.status != DraftStatus.PENDING_REVIEW.value:
-            raise DraftNotReviewable(
-                f"Draft {draft_id} is not awaiting review"
-            )
+            raise DraftNotReviewable(f"Draft {draft_id} is not awaiting review")
         for field, value in edits.model_dump(exclude_none=True).items():
-            setattr(draft, field, value)
+            if hasattr(draft, field):
+                setattr(draft, field, value)
         self._session.flush()
         return draft
 
@@ -69,9 +69,7 @@ class ReviewService:
             DraftStatus.PENDING_REVIEW.value,
             DraftStatus.REJECTED.value,
         }:
-            raise DraftNotReviewable(
-                f"Draft {draft_id} cannot be regenerated"
-            )
+            raise DraftNotReviewable(f"Draft {draft_id} cannot be regenerated")
         task_service = TaskService(self._session, self._actor)
         if draft.status == DraftStatus.PENDING_REVIEW.value:
             task_service.advance(draft.task_id, TaskState.REJECTED)
@@ -79,10 +77,17 @@ class ReviewService:
             draft.rejection_reason = RejectionReason.OTHER.value
         task = task_service.create(
             TaskCreate(
-                kind=TaskKind.PRODUCT,
+                kind=TaskKind.SEO if isinstance(draft, PageDraft) else TaskKind.PRODUCT,
                 operation_type=OperationType.UPDATE,
-                changed_fields=set(ALL_CONTENT_FIELDS),
-                product_id=draft.product_id,
+                changed_fields=set(
+                    PAGE_SEO_ALL_FIELDS
+                    if isinstance(draft, PageDraft)
+                    else ALL_CONTENT_FIELDS
+                ),
+                product_id=draft.product_id
+                if isinstance(draft, ProductDraft)
+                else None,
+                page_id=draft.page_id if isinstance(draft, PageDraft) else None,
             )
         )
         self._session.flush()
@@ -90,13 +95,15 @@ class ReviewService:
 
     def _reviewable_drafts(
         self, draft_ids: Collection[UUID]
-    ) -> list[ProductDraft]:
+    ) -> list[ProductDraft | PageDraft]:
         ids = list(draft_ids)
-        drafts = list(
-            self._session.scalars(
-                select(ProductDraft).where(ProductDraft.id.in_(ids))
-            )
+        product_drafts = list(
+            self._session.scalars(select(ProductDraft).where(ProductDraft.id.in_(ids)))
         )
+        page_drafts = list(
+            self._session.scalars(select(PageDraft).where(PageDraft.id.in_(ids)))
+        )
+        drafts: list[ProductDraft | PageDraft] = [*product_drafts, *page_drafts]
         found = {draft.id for draft in drafts}
         missing = [str(draft_id) for draft_id in ids if draft_id not in found]
         if missing:
@@ -112,10 +119,15 @@ class ReviewService:
             )
         return drafts
 
-    def _get(self, draft_id: UUID) -> ProductDraft:
+    def _get(self, draft_id: UUID) -> ProductDraft | PageDraft:
         draft = self._session.scalar(
             select(ProductDraft).where(ProductDraft.id == draft_id)
         )
         if draft is None:
-            raise DraftNotFoundError(str(draft_id))
+            page_draft = self._session.scalar(
+                select(PageDraft).where(PageDraft.id == draft_id)
+            )
+            if page_draft is None:
+                raise DraftNotFoundError(str(draft_id))
+            return page_draft
         return draft

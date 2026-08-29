@@ -6,7 +6,22 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$PSNativeCommandUseErrorActionPreference = $false
+$OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $callbackPath = "/api/v1/shopify/oauth/callback"
+
+function Get-ShopifyCommand {
+    $runningOnWindows = $env:OS -eq "Windows_NT"
+    if ($runningOnWindows) {
+        $command = Get-Command "shopify.cmd" -ErrorAction Stop
+    }
+    else {
+        $command = Get-Command "shopify" -ErrorAction Stop
+    }
+    return $command.Source
+}
 
 function Get-ShopifyTunnelUrl {
     param([string]$Line)
@@ -41,6 +56,10 @@ if ($SelfTest) {
     if ($null -ne (Get-ShopifyTunnelUrl "Preview URL: https://admin.shopify.com/store/test")) {
         throw "Non-tunnel URL must not be accepted"
     }
+    $shopifyCommand = Get-ShopifyCommand
+    if ($env:OS -eq "Windows_NT" -and -not $shopifyCommand.EndsWith("shopify.cmd")) {
+        throw "Windows must bypass the npm shopify.ps1 wrapper"
+    }
     Write-Output "Shopify dev launcher self-test passed"
     exit 0
 }
@@ -54,6 +73,7 @@ $shopifyArguments = @(
     "--skip-dependencies-installation",
     "--no-color"
 ) + $ExtraArguments
+$shopifyCommand = Get-ShopifyCommand
 
 Push-Location $repositoryRoot
 try {
@@ -68,7 +88,7 @@ try {
     }
 
     Write-Host "Starting Shopify CLI. Press Ctrl+C to stop and restore Docker services."
-    & shopify @shopifyArguments 2>&1 | ForEach-Object {
+    & $shopifyCommand @shopifyArguments 2>&1 | ForEach-Object {
         $line = $_.ToString()
         Write-Host $line
 
