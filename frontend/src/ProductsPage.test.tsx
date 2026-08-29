@@ -8,6 +8,7 @@ import {
   getProducts,
   getProductVersions,
   importProducts,
+  optimizeProductSeo,
   rollbackProduct,
 } from "./api";
 import ProductsPage from "./ProductsPage";
@@ -19,6 +20,7 @@ vi.mock("./api", async (importOriginal) => ({
   generateProductDraft: vi.fn(),
   getProductVersions: vi.fn(),
   rollbackProduct: vi.fn(),
+  optimizeProductSeo: vi.fn(),
 }));
 
 vi.mock("./auth", () => ({
@@ -31,6 +33,7 @@ const mockedImportProducts = vi.mocked(importProducts);
 const mockedGenerateProductDraft = vi.mocked(generateProductDraft);
 const mockedGetProductVersions = vi.mocked(getProductVersions);
 const mockedRollbackProduct = vi.mocked(rollbackProduct);
+const mockedOptimizeProductSeo = vi.mocked(optimizeProductSeo);
 
 describe("ProductsPage", () => {
   beforeEach(() => {
@@ -40,6 +43,7 @@ describe("ProductsPage", () => {
     mockedGetProductVersions.mockReset();
     mockedGetProductVersions.mockResolvedValue([]);
     mockedRollbackProduct.mockReset();
+    mockedOptimizeProductSeo.mockReset();
   });
 
   afterEach(() => {
@@ -359,6 +363,132 @@ describe("ProductsPage", () => {
     expect(await screen.findByText("生成失败")).toBeInTheDocument();
     expect(screen.getByText("生成服务不可用")).toBeInTheDocument();
     expect(screen.queryByText(/触发生成任务/)).not.toBeInTheDocument();
+  });
+
+  it("triggers SEO optimization for a published product", async () => {
+    mockedGetProducts.mockResolvedValue([
+      {
+        id: "product-id",
+        tenant_id: "tenant-id",
+        source: "merchant_csv",
+        source_id: "product-1",
+        sku: "TSHIRT",
+        title: "Classic T-Shirt",
+        description: "Heavy cotton tee",
+        category: "Apparel",
+        tags: ["summer"],
+        images: [],
+        meta_title: "Classic Cotton T-Shirt",
+        meta_description: "Shop our tee",
+        handle: "classic-t-shirt",
+        status: "active",
+        variants: [],
+      },
+    ]);
+    mockedOptimizeProductSeo.mockResolvedValue({
+      id: "seo-task-id",
+      tenant_id: "tenant-id",
+      kind: "seo",
+      operation_type: "update",
+      changed_fields: ["meta_title"],
+      risk_level: "low",
+      status: "pending",
+      last_error: null,
+      product_id: "product-id",
+      created_at: "2024-01-01T00:00:00Z",
+      updated_at: "2024-01-01T00:00:00Z",
+    });
+    const user = userEvent.setup();
+    render(<ProductsPage />);
+    await screen.findByText("Classic T-Shirt");
+
+    await user.click(screen.getByRole("button", { name: "SEO 优化" }));
+
+    expect(mockedOptimizeProductSeo).toHaveBeenCalledWith(
+      "saved-access-token",
+      "product-id",
+      false,
+    );
+    expect(await screen.findByText(/触发 SEO 优化/)).toBeInTheDocument();
+  });
+
+  it("triggers title-inclusive SEO optimization for a published product", async () => {
+    mockedGetProducts.mockResolvedValue([
+      {
+        id: "product-id",
+        tenant_id: "tenant-id",
+        source: "merchant_csv",
+        source_id: "product-1",
+        sku: "TSHIRT",
+        title: "Classic T-Shirt",
+        description: "Heavy cotton tee",
+        category: "Apparel",
+        tags: [],
+        images: [],
+        meta_title: "Classic Cotton T-Shirt",
+        meta_description: "Shop our tee",
+        handle: "classic-t-shirt",
+        status: "active",
+        variants: [],
+      },
+    ]);
+    mockedOptimizeProductSeo.mockResolvedValue({
+      id: "seo-title-task-id",
+      tenant_id: "tenant-id",
+      kind: "seo",
+      operation_type: "update",
+      changed_fields: ["title"],
+      risk_level: "medium",
+      status: "pending",
+      last_error: null,
+      product_id: "product-id",
+      created_at: "2024-01-01T00:00:00Z",
+      updated_at: "2024-01-01T00:00:00Z",
+    });
+    const user = userEvent.setup();
+    render(<ProductsPage />);
+    await screen.findByText("Classic T-Shirt");
+
+    await user.click(screen.getByRole("button", { name: "SEO 标题优化" }));
+
+    expect(mockedOptimizeProductSeo).toHaveBeenCalledWith(
+      "saved-access-token",
+      "product-id",
+      true,
+    );
+    expect(await screen.findByText(/进入审核队列/)).toBeInTheDocument();
+  });
+
+  it("does not offer SEO optimization for a draft product", async () => {
+    mockedGetProducts.mockResolvedValue([
+      {
+        id: "product-id",
+        tenant_id: "tenant-id",
+        source: "merchant_csv",
+        source_id: "product-1",
+        sku: "TSHIRT",
+        title: "Classic T-Shirt",
+        description: "Heavy cotton tee",
+        category: "Apparel",
+        tags: [],
+        images: [],
+        meta_title: "Classic Cotton T-Shirt",
+        meta_description: "Shop our tee",
+        handle: "classic-t-shirt",
+        status: "draft",
+        variants: [],
+      },
+    ]);
+
+    render(<ProductsPage />);
+    await screen.findByText("Classic T-Shirt");
+
+    expect(
+      screen.queryByRole("button", { name: "SEO 优化" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "SEO 标题优化" }),
+    ).not.toBeInTheDocument();
   });
 
   it("notifies the shell when the product session has expired", async () => {

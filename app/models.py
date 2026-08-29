@@ -123,6 +123,7 @@ class Product(TenantOwned, Timestamped, Base):
     images: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     meta_title: Mapped[str] = mapped_column(String(255), nullable=False)
     meta_description: Mapped[str] = mapped_column(Text, nullable=False)
+    alt_text: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False, default=dict)
     handle: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     shopify_product_id: Mapped[str | None] = mapped_column(

@@ -74,6 +74,7 @@ def canonical_from_state(
         images=list(state["images"]),
         meta_title=state["meta_title"],
         meta_description=state["meta_description"],
+        alt_text=dict(state.get("alt_text", {})),
         handle=state["handle"],
         status=ProductStatus(state["status"]),
         shopify_product_id=product.shopify_product_id,

@@ -58,7 +58,10 @@ def to_shopify_product_payload(product: CanonicalProduct) -> dict[str, object]:
                     "type": "multi_line_text_field",
                 },
             ],
-            "images": [{"src": image} for image in product.images],
+            "images": [
+                {"src": image, "alt": product.alt_text.get(image, "")}
+                for image in product.images
+            ],
             "variants": [
                 {
                     "sku": variant.sku,

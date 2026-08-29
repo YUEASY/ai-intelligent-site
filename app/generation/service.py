@@ -1,6 +1,8 @@
 """DB-aware generation services: draft persistence and review queue."""
 
-from sqlalchemy import case, select
+from dataclasses import dataclass
+
+from sqlalchemy import and_, case, or_, select
 
 from app.database import TenantSession
 from app.domain.draft import DraftStatus
@@ -14,6 +16,7 @@ from app.generation.workflow import (
 )
 from app.models import Product, ProductDraft, Task
 from app.product_service import ProductNotFoundError, ProductService
+from app.schemas import TaskKind
 
 
 class DraftNotFoundError(LookupError):
@@ -33,6 +36,7 @@ def to_canonical_product(product: Product) -> CanonicalProduct:
         images=product.images,
         meta_title=product.meta_title,
         meta_description=product.meta_description,
+        alt_text=dict(product.alt_text),
         handle=product.handle,
         status=ProductStatus(product.status),
         shopify_product_id=product.shopify_product_id,
@@ -50,6 +54,14 @@ def to_canonical_product(product: Product) -> CanonicalProduct:
     )
 
 
+@dataclass(frozen=True)
+class ReviewQueueEntry:
+    """A draft together with its owning task for review-queue rendering."""
+
+    draft: ProductDraft
+    task: Task
+
+
 class DraftService:
     def __init__(self, session: TenantSession) -> None:
         self._session = session
@@ -59,6 +71,7 @@ class DraftService:
         task: Task,
         content: GeneratedContent,
         risk_level: RiskLevel,
+        status: DraftStatus = DraftStatus.PENDING_REVIEW,
     ) -> ProductDraft:
         if task.product_id is None:
             raise GenerationError("task has no product to generate for")
@@ -82,18 +95,19 @@ class DraftService:
             alt_text=content.alt_text,
             seo_tags=content.seo_tags,
             risk_level=risk_level.value,
-            status=DraftStatus.PENDING_REVIEW.value,
+            status=status.value,
         )
         self._session.add(draft)
         self._session.flush()
         return draft
 
-    def review_queue(self) -> list[ProductDraft]:
+    def review_queue(self) -> list[ReviewQueueEntry]:
         """Drafts awaiting review or publishing, ordered by risk and age.
 
         Approved drafts remain visible so the reviewer can publish them from the
         same queue. Risk ordering is high → medium → low so the riskiest
-        items surface first.
+        items surface first.  Published SEO drafts stay visible so the queue can
+        show that a low-risk optimization has already been written to Shopify.
         """
 
         risk_rank = case(
@@ -103,13 +117,20 @@ class DraftService:
             else_=3,
         )
         statement = (
-            select(ProductDraft)
+            select(ProductDraft, Task)
+            .join(Task, Task.id == ProductDraft.task_id)
             .where(
-                ProductDraft.status.in_(
-                    {
-                        DraftStatus.PENDING_REVIEW.value,
-                        DraftStatus.APPROVED.value,
-                    }
+                or_(
+                    ProductDraft.status.in_(
+                        {
+                            DraftStatus.PENDING_REVIEW.value,
+                            DraftStatus.APPROVED.value,
+                        }
+                    ),
+                    and_(
+                        ProductDraft.status == DraftStatus.PUBLISHED.value,
+                        Task.kind == TaskKind.SEO.value,
+                    ),
                 )
             )
             .order_by(
@@ -119,7 +140,10 @@ class DraftService:
                 ProductDraft.id,
             )
         )
-        return list(self._session.scalars(statement))
+        return [
+            ReviewQueueEntry(draft=draft, task=task)
+            for draft, task in self._session.execute(statement)
+        ]
 
 
 class GenerationService:

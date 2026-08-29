@@ -21,6 +21,7 @@ import {
   getProductVersions,
   getProducts,
   importProducts,
+  optimizeProductSeo,
   rollbackProduct,
 } from "./api";
 import { withAuthenticatedSession } from "./auth";
@@ -44,6 +45,9 @@ export default function ProductsPage({
   const [generatingId, setGeneratingId] = useState<string>();
   const [generateNotice, setGenerateNotice] = useState<string>();
   const [generateError, setGenerateError] = useState<string>();
+  const [optimizingSeoId, setOptimizingSeoId] = useState<string>();
+  const [seoNotice, setSeoNotice] = useState<string>();
+  const [seoError, setSeoError] = useState<string>();
   const [versions, setVersions] = useState<ProductSnapshot[]>();
   const [rollbackNotice, setRollbackNotice] = useState<string>();
   const csvInput = useRef<HTMLInputElement>(null);
@@ -85,6 +89,31 @@ export default function ProductsPage({
       );
     } finally {
       setGeneratingId(undefined);
+    }
+  };
+
+  const optimizeSeo = async (product: Product, includeTitle: boolean) => {
+    setOptimizingSeoId(product.id);
+    setSeoNotice(undefined);
+    setSeoError(undefined);
+    try {
+      await withAuthenticatedSession((token) =>
+        optimizeProductSeo(token, product.id, includeTitle),
+      );
+      setSeoNotice(
+        includeTitle
+          ? `已为 ${product.title} 触发含标题的 SEO 优化，生成后将进入审核队列`
+          : `已为 ${product.title} 触发 SEO 优化，低风险字段校验通过后将自动写入 Shopify`,
+      );
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 401) {
+        onSessionExpired?.();
+      }
+      setSeoError(
+        cause instanceof ApiError ? cause.message : "SEO 优化失败，请稍后重试",
+      );
+    } finally {
+      setOptimizingSeoId(undefined);
     }
   };
 
@@ -243,6 +272,15 @@ export default function ProductsPage({
           description={generateError}
         />
       )}
+      {seoNotice && <Alert showIcon type="success" message={seoNotice} />}
+      {seoError && (
+        <Alert
+          showIcon
+          type="error"
+          title="SEO 优化失败"
+          description={seoError}
+        />
+      )}
       {importErrors.length > 0 && (
         <Alert
           showIcon
@@ -316,6 +354,22 @@ export default function ProductsPage({
                   >
                     生成 AI 草稿
                   </Button>
+                  {product.status === "active" && (
+                    <>
+                      <Button
+                        loading={optimizingSeoId === product.id}
+                        onClick={() => void optimizeSeo(product, false)}
+                      >
+                        SEO 优化
+                      </Button>
+                      <Button
+                        loading={optimizingSeoId === product.id}
+                        onClick={() => void optimizeSeo(product, true)}
+                      >
+                        SEO 标题优化
+                      </Button>
+                    </>
+                  )}
                 </Space>
               </Space>
             </Card>

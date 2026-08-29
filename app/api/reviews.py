@@ -8,6 +8,7 @@ from app.api.platform_deps import (
     get_platform_adapter_factory,
 )
 from app.dependencies import RequestContext, get_request_context
+from app.domain.task_state import TaskState
 from app.generation.service import DraftNotFoundError, DraftService
 from app.publish_service import (
     DraftNotPublishable,
@@ -23,7 +24,9 @@ from app.schemas import (
     PublishRequest,
     RejectRequest,
     ReviewActionRequest,
+    ReviewQueueItemRead,
     SnapshotRead,
+    TaskKind,
     TaskRead,
 )
 from app.shopify.products import NoConnectedShopifyStore
@@ -32,13 +35,17 @@ from app.worker import execute_task
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 
 
-@router.get("/queue", response_model=list[DraftRead])
+@router.get("/queue", response_model=list[ReviewQueueItemRead])
 def review_queue(
     context: Annotated[RequestContext, Depends(get_request_context)],
-) -> list[DraftRead]:
+) -> list[ReviewQueueItemRead]:
     return [
-        DraftRead.model_validate(draft)
-        for draft in DraftService(context.session).review_queue()
+        ReviewQueueItemRead(
+            **DraftRead.model_validate(entry.draft).model_dump(),
+            kind=TaskKind(entry.task.kind),
+            task_status=TaskState(entry.task.status),
+        )
+        for entry in DraftService(context.session).review_queue()
     ]
 
 

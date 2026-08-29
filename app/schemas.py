@@ -156,6 +156,19 @@ class DraftEditRequest(BaseModel):
     seo_tags: list[str] | None = None
 
 
+class SeoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    include_title: bool = False
+
+
+class ReviewQueueItemRead(DraftRead):
+    """A review-queue item enriched with its task kind and lifecycle status."""
+
+    kind: TaskKind
+    task_status: TaskState
+
+
 class ReviewActionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

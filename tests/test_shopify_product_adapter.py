@@ -106,6 +106,15 @@ def test_payload_maps_canonical_fields_to_shopify() -> None:
     ]
 
 
+def test_payload_maps_image_alt_text() -> None:
+    product = make_product()
+    product.alt_text = {"front.jpg": "Classic T-Shirt Apparel"}
+    payload = to_shopify_product_payload(product)
+    assert payload["product"]["images"] == [
+        {"src": "front.jpg", "alt": "Classic T-Shirt Apparel"}
+    ]
+
+
 def test_publish_returns_success_receipt_with_remote_id() -> None:
     client = FakeShopifyProductClient()
     adapter = ShopifyPlatformAdapter(

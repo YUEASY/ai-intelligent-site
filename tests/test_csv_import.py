@@ -37,6 +37,7 @@ def test_csv_is_normalized_into_a_canonical_product_with_variants() -> None:
             "images": ["front.jpg", "back.jpg"],
             "meta_title": "Classic Cotton T-Shirt",
             "meta_description": "Shop our classic cotton T-shirt",
+            "alt_text": {},
             "handle": "classic-t-shirt",
             "status": "draft",
             "shopify_product_id": None,

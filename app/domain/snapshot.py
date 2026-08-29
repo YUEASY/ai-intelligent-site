@@ -26,6 +26,7 @@ def product_state(product: Any) -> dict[str, Any]:
         "images": list(product.images),
         "meta_title": product.meta_title,
         "meta_description": product.meta_description,
+        "alt_text": dict(product.alt_text),
         "handle": product.handle,
         "status": product.status,
         "variants": [
@@ -49,6 +50,7 @@ def apply_draft_to_state(state: dict[str, Any], draft: Any) -> dict[str, Any]:
     result["description"] = draft.description
     result["meta_title"] = draft.meta_title
     result["meta_description"] = draft.meta_description
+    result["alt_text"] = dict(draft.alt_text)
     result["tags"] = list(draft.seo_tags)
     return result
 

@@ -44,6 +44,8 @@ function draft(
   riskLevel: ReviewDraft["risk_level"],
   createdAt: string,
   status: ReviewDraft["status"] = "pending_review",
+  kind: ReviewDraft["kind"] = "product",
+  taskStatus = "awaiting_review",
 ): ReviewDraft {
   return {
     id,
@@ -53,12 +55,14 @@ function draft(
     title,
     description: `${title} 描述`,
     meta_title: title,
-    meta_description: "",
+    meta_description: `${title} 的 Meta 描述`,
     alt_text: {},
     seo_tags: [],
     risk_level: riskLevel,
     status,
     rejection_reason: null,
+    kind,
+    task_status: taskStatus,
     created_at: createdAt,
     updated_at: createdAt,
   };
@@ -291,5 +295,61 @@ describe("ReviewQueuePage", () => {
         true,
       ),
     );
+  });
+
+  it("shows SEO suggestions with their task type and status", async () => {
+    mockedGetReviewQueue.mockResolvedValue([
+      {
+        ...draft(
+          "seo",
+          "Classic T-Shirt",
+          "low",
+          "2024-01-01T00:00:00Z",
+          "pending_review",
+          "seo",
+          "awaiting_review",
+        ),
+        meta_title: "Optimized Meta Title",
+        meta_description: "Optimized meta description",
+        alt_text: { "front.jpg": "Optimized alt" },
+      },
+    ]);
+
+    render(<ReviewQueuePage />);
+
+    await screen.findByText("SEO 优化");
+    expect(screen.getByText("等待审核")).toBeInTheDocument();
+    expect(screen.getByText("SEO 优化建议")).toBeInTheDocument();
+    expect(screen.getByText(/Optimized Meta Title/)).toBeInTheDocument();
+  });
+
+  it("distinguishes the four SEO lifecycle states", async () => {
+    mockedGetReviewQueue.mockResolvedValue([
+      draft("suggested", "Suggested", "low", "2024-01-01T00:00:00Z", "pending_review", "seo", "running"),
+      draft("awaiting", "Awaiting", "low", "2024-01-01T00:00:01Z", "pending_review", "seo", "awaiting_review"),
+      draft("written", "Written", "low", "2024-01-01T00:00:02Z", "published", "seo", "published"),
+      draft("failed", "Failed", "low", "2024-01-01T00:00:03Z", "pending_review", "seo", "failed"),
+    ]);
+
+    render(<ReviewQueuePage />);
+
+    expect(await screen.findByText("建议已生成")).toBeInTheDocument();
+    expect(screen.getByText("等待审核")).toBeInTheDocument();
+    expect(screen.getByText("已写入 Shopify")).toBeInTheDocument();
+    expect(screen.getByText("写入失败")).toBeInTheDocument();
+  });
+
+  it("does not offer review actions for written or failed SEO items", async () => {
+    mockedGetReviewQueue.mockResolvedValue([
+      draft("written", "Written", "low", "2024-01-01T00:00:00Z", "published", "seo", "published"),
+      draft("failed", "Failed", "low", "2024-01-01T00:00:01Z", "pending_review", "seo", "failed"),
+    ]);
+
+    render(<ReviewQueuePage />);
+
+    await screen.findByText("已写入 Shopify");
+    expect(screen.queryByRole("button", { name: /发\s*布/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /编\s*辑/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
 });

@@ -85,6 +85,7 @@ def apply_state_to_product(product: Product, state: dict[str, Any]) -> None:
     product.images = list(state["images"])
     product.meta_title = state["meta_title"]
     product.meta_description = state["meta_description"]
+    product.alt_text = dict(state.get("alt_text", {}))
     product.handle = state["handle"]
     product.status = state["status"]
 

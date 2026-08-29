@@ -194,13 +194,13 @@ def test_review_queue_orders_by_risk_then_creation_time() -> None:
 
         queue = DraftService(session).review_queue()
 
-        assert [draft.id for draft in queue] == [
+        assert [entry.draft.id for entry in queue] == [
             high.id,
             medium_old.id,
             medium_new.id,
             low.id,
         ]
-        assert published.id not in {draft.id for draft in queue}
+        assert published.id not in {entry.draft.id for entry in queue}
 
 
 def test_run_task_workflow_generates_draft_and_advances_to_review() -> None:
@@ -238,7 +238,7 @@ def test_run_task_workflow_generates_draft_and_advances_to_review() -> None:
         assert refreshed_task.status == TaskState.AWAITING_REVIEW.value
 
 
-def test_run_task_workflow_handles_a_task_without_a_product() -> None:
+def test_run_task_workflow_fails_a_seo_task_without_a_product() -> None:
     engine = make_engine()
     with TenantSession(
         bind=engine, expire_on_commit=False, tenant_id=TENANT_ID
@@ -262,7 +262,11 @@ def test_run_task_workflow_handles_a_task_without_a_product() -> None:
         status = run_task_workflow(session, task_id)
         session.commit()
 
-        assert status == TaskState.PUBLISHED.value
+        assert status == TaskState.FAILED.value
+        refreshed = session.get(Task, task_id)
+        assert refreshed is not None
+        assert refreshed.status == TaskState.FAILED.value
+        assert "no product" in (refreshed.last_error or "")
         assert (
             session.scalar(select(ProductDraft).where(ProductDraft.task_id == task_id))
             is None

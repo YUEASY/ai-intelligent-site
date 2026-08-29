@@ -42,6 +42,7 @@ class CanonicalProduct(BaseModel):
     images: list[str]
     meta_title: str = Field(max_length=255)
     meta_description: str
+    alt_text: dict[str, str] = Field(default_factory=dict)
     handle: str = Field(min_length=1, max_length=255)
     status: ProductStatus
     shopify_product_id: str | None = None

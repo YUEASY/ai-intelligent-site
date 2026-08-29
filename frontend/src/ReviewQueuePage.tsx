@@ -47,6 +47,23 @@ const rejectionReasons: { value: RejectionReason; label: string }[] = [
   { value: "other", label: "其他" },
 ];
 
+type SeoStatus = "suggested" | "awaiting_review" | "written" | "write_failed";
+
+const seoStatusMeta: Record<SeoStatus, { label: string; color: string }> = {
+  suggested: { label: "建议已生成", color: "cyan" },
+  awaiting_review: { label: "等待审核", color: "orange" },
+  written: { label: "已写入 Shopify", color: "green" },
+  write_failed: { label: "写入失败", color: "red" },
+};
+
+function seoStatusOf(draft: ReviewDraft): SeoStatus | null {
+  if (draft.kind !== "seo") return null;
+  if (draft.task_status === "failed") return "write_failed";
+  if (draft.status === "published") return "written";
+  if (draft.task_status === "awaiting_review") return "awaiting_review";
+  return "suggested";
+}
+
 type Notice = { type: "success" | "error"; message: string };
 
 export default function ReviewQueuePage({
@@ -244,61 +261,84 @@ export default function ReviewQueuePage({
         </Card>
       ) : (
         <div className="review-draft-list">
-          {drafts?.map((draft) => (
-            <Card key={draft.id} className="review-draft-card" variant="borderless">
-              <Space orientation="vertical" size={8}>
-                <Space wrap align="start">
-                  {draft.status === "pending_review" && (
-                    <Checkbox
-                      aria-label={`选择 ${draft.title}`}
-                      checked={selected.has(draft.id)}
-                      onChange={(event) =>
-                        toggleSelected(draft.id, event.target.checked)
-                      }
-                    />
-                  )}
-                  <Tag color={riskMeta[draft.risk_level].color}>
-                    {riskMeta[draft.risk_level].label}
-                  </Tag>
-                  {draft.status === "approved" && <Tag color="blue">已通过</Tag>}
-                  <Text type="secondary">
-                    {new Date(draft.created_at).toLocaleString()}
-                  </Text>
-                </Space>
-                <Title level={3}>{draft.title}</Title>
-                <Text>{draft.description}</Text>
-                {draft.seo_tags.length > 0 && (
-                  <Space wrap>
-                    {draft.seo_tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
+          {drafts?.map((draft) => {
+            const seoStatus = seoStatusOf(draft);
+            const isSeoReadonly =
+              seoStatus === "write_failed" || seoStatus === "written";
+            return (
+              <Card key={draft.id} className="review-draft-card" variant="borderless">
+                <Space orientation="vertical" size={8}>
+                  <Space wrap align="start">
+                    {draft.status === "pending_review" && !isSeoReadonly && (
+                      <Checkbox
+                        aria-label={`选择 ${draft.title}`}
+                        checked={selected.has(draft.id)}
+                        onChange={(event) =>
+                          toggleSelected(draft.id, event.target.checked)
+                        }
+                      />
+                    )}
+                    <Tag color={riskMeta[draft.risk_level].color}>
+                      {riskMeta[draft.risk_level].label}
+                    </Tag>
+                    {draft.kind === "seo" && <Tag color="cyan">SEO 优化</Tag>}
+                    {seoStatus && (
+                      <Tag color={seoStatusMeta[seoStatus].color}>
+                        {seoStatusMeta[seoStatus].label}
+                      </Tag>
+                    )}
+                    {draft.status === "approved" && <Tag color="blue">已通过</Tag>}
+                    <Text type="secondary">
+                      {new Date(draft.created_at).toLocaleString()}
+                    </Text>
                   </Space>
-                )}
-                <Space wrap>
-                  {draft.status === "approved" ? (
-                    <Popconfirm
-                      title="确认发布到 Shopify？"
-                      description="发布属于高风险操作，将写入商户店铺并生成版本快照。"
-                      okText="确认发布"
-                      cancelText="取消"
-                      onConfirm={() => publish(draft)}
-                    >
-                      <Button type="primary" disabled={busy}>
-                        发布
-                      </Button>
-                    </Popconfirm>
-                  ) : (
-                    <>
-                      <Button disabled={busy} onClick={() => setEditing(draft)}>
-                        编辑
-                      </Button>
-                      <Button disabled={busy} onClick={() => regenerate(draft)}>
-                        重生成
-                      </Button>
-                    </>
+                  <Title level={3}>{draft.title}</Title>
+                  <Text>{draft.description}</Text>
+                  {draft.kind === "seo" && (
+                    <Space orientation="vertical" size={2} className="seo-suggestion">
+                      <Text strong>SEO 优化建议</Text>
+                      <Text type="secondary">Meta 标题：{draft.meta_title}</Text>
+                      <Text type="secondary">Meta 描述：{draft.meta_description}</Text>
+                      {Object.keys(draft.alt_text).length > 0 && (
+                        <Text type="secondary">
+                          图片 Alt：{Object.values(draft.alt_text).join(" / ")}
+                        </Text>
+                      )}
+                    </Space>
                   )}
+                  {draft.seo_tags.length > 0 && (
+                    <Space wrap>
+                      {draft.seo_tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}
+                    </Space>
+                  )}
+                  <Space wrap>
+                    {isSeoReadonly ? null : draft.status === "approved" ? (
+                      <Popconfirm
+                        title="确认发布到 Shopify？"
+                        description="发布属于高风险操作，将写入商户店铺并生成版本快照。"
+                        okText="确认发布"
+                        cancelText="取消"
+                        onConfirm={() => publish(draft)}
+                      >
+                        <Button type="primary" disabled={busy}>
+                          发布
+                        </Button>
+                      </Popconfirm>
+                    ) : (
+                      <>
+                        <Button disabled={busy} onClick={() => setEditing(draft)}>
+                          编辑
+                        </Button>
+                        <Button disabled={busy} onClick={() => regenerate(draft)}>
+                          重生成
+                        </Button>
+                      </>
+                    )}
+                  </Space>
                 </Space>
-              </Space>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
 

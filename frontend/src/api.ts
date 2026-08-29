@@ -86,6 +86,8 @@ export type ReviewDraft = {
   risk_level: RiskLevel;
   status: DraftStatus;
   rejection_reason: RejectionReason | null;
+  kind: "product" | "seo";
+  task_status: string;
   created_at: string;
   updated_at: string;
 };
@@ -251,6 +253,19 @@ export async function generateProductDraft(
     headers: { Authorization: `Bearer ${token}` },
   });
   return parseResponse<Task>(response);
+}
+
+export async function optimizeProductSeo(
+  token: string,
+  productId: string,
+  includeTitle: boolean,
+): Promise<Task> {
+  return authenticatedMutation<Task>(
+    `/products/${productId}/seo`,
+    token,
+    "POST",
+    { include_title: includeTitle },
+  );
 }
 
 export async function getShopifyAuthorizationUrl(

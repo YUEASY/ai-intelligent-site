@@ -33,11 +33,13 @@ from app.schemas import (
     ProductRead,
     RollbackRead,
     RollbackRequest,
+    SeoRequest,
     SnapshotRead,
     TaskCreate,
     TaskKind,
     TaskRead,
 )
+from app.seo import SEO_ALL_FIELDS, SEO_LOW_RISK_FIELDS, is_published
 from app.services import TaskService
 from app.shopify.products import NoConnectedShopifyStore
 from app.snapshot_service import SnapshotNotFoundError, SnapshotService
@@ -134,6 +136,42 @@ def generate_product_content(
             kind=TaskKind.PRODUCT,
             operation_type=OperationType.UPDATE,
             changed_fields=set(ALL_CONTENT_FIELDS),
+            product_id=product_id,
+        )
+    )
+    context.session.commit()
+    execute_task.delay(str(task.id), str(task.tenant_id))
+    return TaskRead.model_validate(task)
+
+
+@router.post(
+    "/{product_id}/seo",
+    response_model=TaskRead,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def optimize_product_seo(
+    product_id: UUID,
+    command: SeoRequest,
+    context: Annotated[RequestContext, Depends(get_request_context)],
+) -> TaskRead:
+    try:
+        product = ProductService(context.session).get(product_id)
+    except ProductNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+        ) from exc
+    if not is_published(product):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Product is not published yet",
+        )
+
+    fields = SEO_ALL_FIELDS if command.include_title else SEO_LOW_RISK_FIELDS
+    task = TaskService(context.session, actor=context.actor).create(
+        TaskCreate(
+            kind=TaskKind.SEO,
+            operation_type=OperationType.UPDATE,
+            changed_fields=set(fields),
             product_id=product_id,
         )
     )
