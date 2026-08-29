@@ -1,0 +1,14 @@
+# Webhook subscriptions applied by `shopify app deploy`.
+#
+# The ingress route is `POST /api/v1/shopify/webhooks/ingress/{tenant_id}`.
+# For the MVP these subscriptions point at the bootstrap tenant; additional
+# merchants require one subscription block per tenant_id.
+
+[[webhooks.subscriptions]]
+topics = [
+  "app/uninstalled",
+  "products/create",
+  "products/update",
+  "products/delete",
+]
+uri = "/api/v1/shopify/webhooks/ingress/00000000-0000-0000-0000-000000000001"

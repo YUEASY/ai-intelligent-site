@@ -18,6 +18,8 @@ Compose 会运行 Alembic 数据库迁移，并创建 `.env` 中配置的初始�
 
 内部后台使用相同租户 ID、`.env` 中的 `BOOTSTRAP_ADMIN_EMAIL` 与 `BOOTSTRAP_ADMIN_PASSWORD` 登录。登录后可看到概览、任务、审核、商品占位导航；前端 Nginx 将 `/api` 请求代理到 FastAPI。
 
+Shopify App 的最小 Scope（`write_products,write_content`）配置在 `shopify.app.toml`，Webhook 订阅声明在 `shopify.webhooks.toml`（默认指向引导租户的 ingress）。真实店铺授权与 Webhook 的验证步骤见 `docs/shopify-live-validation.md`。
+
 ## API 流程
 
 - `POST /api/v1/auth/login`：使用 `tenant_id`、`email`、`password` 登录。
