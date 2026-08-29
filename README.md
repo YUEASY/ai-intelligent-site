@@ -1,12 +1,12 @@
 # AI 智能建站
 
-FastAPI + Celery + PostgreSQL + Redis 项目骨架，包含多租户任务状态机、审计日志和内部后台登录 API。
+FastAPI + Celery + PostgreSQL + Redis 后端与 React + Vite + Ant Design 内部后台，包含多租户任务状态机、审计日志和管理员登录。
 
 ## 启动
 
 1. 复制 `.env.example` 为 `.env`，修改 `JWT_SECRET`、管理员密码与 Shopify 配置。`SHOPIFY_TOKEN_ENCRYPTION_KEY` 必须是 Base64 编码的 32 字节随机密钥。
 2. 运行 `docker compose up --build --detach --wait`。
-3. 打开 <http://localhost:8000/docs>；`GET /health` 返回 `{"status":"healthy"}` 时所有依赖均可用。
+3. 打开内部后台 <http://localhost:3000>；API 文档位于 <http://localhost:8000/docs>。`GET /health` 返回 `{"status":"healthy"}` 时后端依赖均可用。
 
 若 Windows 的 Docker 配置启用了 Bake，且仓库路径包含中文，使用下面的一键兼容命令避开 BuildKit 的路径编码问题：
 
@@ -15,6 +15,8 @@ $env:DOCKER_BUILDKIT = "0"; docker compose up --build --detach --wait
 ```
 
 Compose 会运行 Alembic 数据库迁移，并创建 `.env` 中配置的初始租户管理员。默认租户 ID 为 `00000000-0000-0000-0000-000000000001`。
+
+内部后台使用相同租户 ID、`.env` 中的 `BOOTSTRAP_ADMIN_EMAIL` 与 `BOOTSTRAP_ADMIN_PASSWORD` 登录。登录后可看到概览、任务、审核、商品占位导航；前端 Nginx 将 `/api` 请求代理到 FastAPI。
 
 ## API 流程
 
@@ -63,4 +65,9 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pytest
 .\.venv\Scripts\python.exe -m mypy app tests
 .\.venv\Scripts\python.exe -m ruff check .
+Set-Location frontend
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm lint
+pnpm build
 ```

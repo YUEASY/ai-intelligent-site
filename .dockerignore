@@ -1,5 +1,6 @@
 .git
 .venv
+.pnpm-store
 __pycache__
 .pytest_cache
 .mypy_cache
@@ -9,4 +10,6 @@ __pycache__
 tests
 docs
 *.pdf
-
+frontend/node_modules
+frontend/dist
+frontend/.vite

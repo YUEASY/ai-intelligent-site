@@ -80,6 +80,20 @@ services:
       timeout: 10s
       retries: 10
 
+  frontend:
+    image: ai-intelligent-site-frontend:local
+    build: ./frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "3000:80"
+
 volumes:
   postgres-data:
   redis-data:
