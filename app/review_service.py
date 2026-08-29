@@ -65,7 +65,19 @@ class ReviewService:
 
     def regenerate(self, draft_id: UUID) -> Task:
         draft = self._get(draft_id)
-        task = TaskService(self._session, self._actor).create(
+        if draft.status not in {
+            DraftStatus.PENDING_REVIEW.value,
+            DraftStatus.REJECTED.value,
+        }:
+            raise DraftNotReviewable(
+                f"Draft {draft_id} cannot be regenerated"
+            )
+        task_service = TaskService(self._session, self._actor)
+        if draft.status == DraftStatus.PENDING_REVIEW.value:
+            task_service.advance(draft.task_id, TaskState.REJECTED)
+            draft.status = DraftStatus.REJECTED.value
+            draft.rejection_reason = RejectionReason.OTHER.value
+        task = task_service.create(
             TaskCreate(
                 kind=TaskKind.PRODUCT,
                 operation_type=OperationType.UPDATE,

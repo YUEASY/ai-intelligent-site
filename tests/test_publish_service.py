@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, TenantSession
 from app.domain.draft import DraftStatus
+from app.domain.product import ProductStatus
 from app.domain.snapshot import SnapshotKind
 from app.domain.task_state import TaskState
 from app.models import Product, ProductDraft, ProductSnapshot, ProductVariant, Task
@@ -140,7 +141,14 @@ def test_publish_writes_snapshot_and_marks_published() -> None:
         session.commit()
 
         assert result.remote_id == "remote-1"
-        assert adapter.write_calls[0][0] == "publish_product"
+        operation, tenant_id, written = adapter.write_calls[0]
+        assert operation == "publish_product"
+        assert tenant_id == TENANT_ID
+        assert written.title == "Edited Classic T-Shirt"
+        assert written.description == "Edited heavy cotton tee"
+        assert written.status == ProductStatus.ACTIVE
+        assert written.shopify_product_id is None
+        assert [variant.sku for variant in written.variants] == ["TSHIRT-BLK-S"]
         assert result.draft.status == DraftStatus.PUBLISHED.value
         assert result.task.status == TaskState.PUBLISHED.value
         assert result.snapshot.version == 1
@@ -253,7 +261,9 @@ def test_rollback_restores_previous_version_and_rolls_back_task() -> None:
             ).rollback(product.id, version=1)
             rollback_session.commit()
 
-            assert rollback_adapter.write_calls[0][0] == "update_product"
+            operation, _, written = rollback_adapter.write_calls[0]
+            assert operation == "update_product"
+            assert written.title == "Classic T-Shirt"
             assert result.snapshot.kind == SnapshotKind.ROLLBACK.value
             assert result.snapshot.restored_version == 1
             assert result.task is not None

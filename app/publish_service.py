@@ -129,15 +129,6 @@ class PublishService:
         after["status"] = ProductStatus.ACTIVE.value
         canonical = canonical_from_state(product, after)
 
-        receipt = self._write(product, canonical)
-        if not receipt.success:
-            raise PublishFailed(receipt.error or "Shopify did not confirm the publish")
-
-        apply_state_to_product(product, after)
-        product.status = ProductStatus.ACTIVE.value
-        if receipt.remote_id:
-            product.shopify_product_id = receipt.remote_id
-
         snapshot = SnapshotService(self._session).capture(
             product,
             before=before,
@@ -145,6 +136,16 @@ class PublishService:
             actor=self._actor,
             kind=SnapshotKind.PUBLISH,
         )
+
+        receipt = self._write(product, canonical)
+        if not receipt.success:
+            self._session.delete(snapshot)
+            raise PublishFailed(receipt.error or "Shopify did not confirm the publish")
+
+        apply_state_to_product(product, after)
+        product.status = ProductStatus.ACTIVE.value
+        if receipt.remote_id:
+            product.shopify_product_id = receipt.remote_id
 
         task_service.advance(draft.task_id, TaskState.PUBLISHED)
         draft.status = DraftStatus.PUBLISHED.value
@@ -165,14 +166,6 @@ class PublishService:
         after = dict(target.payload)
         canonical = canonical_from_state(product, after)
 
-        receipt = self._write(product, canonical)
-        if not receipt.success:
-            raise PublishFailed(
-                receipt.error or "Shopify did not confirm the rollback"
-            )
-
-        apply_state_to_product(product, after)
-
         snapshot = snapshots.capture(
             product,
             before=before,
@@ -181,6 +174,15 @@ class PublishService:
             kind=SnapshotKind.ROLLBACK,
             restored_version=version,
         )
+
+        receipt = self._write(product, canonical)
+        if not receipt.success:
+            self._session.delete(snapshot)
+            raise PublishFailed(
+                receipt.error or "Shopify did not confirm the rollback"
+            )
+
+        apply_state_to_product(product, after)
 
         task = self._latest_published_task(product_id)
         if task is not None:

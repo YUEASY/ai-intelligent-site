@@ -1,8 +1,15 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, generateProductDraft, getProducts, importProducts } from "./api";
+import {
+  ApiError,
+  generateProductDraft,
+  getProducts,
+  getProductVersions,
+  importProducts,
+  rollbackProduct,
+} from "./api";
 import ProductsPage from "./ProductsPage";
 
 vi.mock("./api", async (importOriginal) => ({
@@ -10,6 +17,8 @@ vi.mock("./api", async (importOriginal) => ({
   getProducts: vi.fn(),
   importProducts: vi.fn(),
   generateProductDraft: vi.fn(),
+  getProductVersions: vi.fn(),
+  rollbackProduct: vi.fn(),
 }));
 
 vi.mock("./auth", () => ({
@@ -20,12 +29,17 @@ vi.mock("./auth", () => ({
 const mockedGetProducts = vi.mocked(getProducts);
 const mockedImportProducts = vi.mocked(importProducts);
 const mockedGenerateProductDraft = vi.mocked(generateProductDraft);
+const mockedGetProductVersions = vi.mocked(getProductVersions);
+const mockedRollbackProduct = vi.mocked(rollbackProduct);
 
 describe("ProductsPage", () => {
   beforeEach(() => {
     mockedGetProducts.mockReset();
     mockedImportProducts.mockReset();
     mockedGenerateProductDraft.mockReset();
+    mockedGetProductVersions.mockReset();
+    mockedGetProductVersions.mockResolvedValue([]);
+    mockedRollbackProduct.mockReset();
   });
 
   afterEach(() => {
@@ -353,5 +367,64 @@ describe("ProductsPage", () => {
 
     expect(await screen.findByText("暂时无法加载商品列表")).toBeInTheDocument();
     expect(onSessionExpired).toHaveBeenCalledOnce();
+  });
+
+  it("shows version history and rolls back to a previous version", async () => {
+    mockedGetProducts.mockResolvedValue([
+      {
+        id: "product-id",
+        tenant_id: "tenant-id",
+        source: "merchant_csv",
+        source_id: "product-1",
+        sku: "TSHIRT",
+        title: "Classic T-Shirt",
+        description: "Heavy cotton tee",
+        category: "Apparel",
+        tags: ["summer"],
+        images: [],
+        meta_title: "Classic Cotton T-Shirt",
+        meta_description: "Shop our tee",
+        handle: "classic-t-shirt",
+        status: "active",
+        variants: [],
+      },
+    ]);
+    mockedGetProductVersions.mockResolvedValue([
+      {
+        id: "snapshot-1",
+        product_id: "product-id",
+        version: 1,
+        kind: "publish",
+        payload: {},
+        field_diff: {},
+        actor: "admin@example.com",
+        restored_version: null,
+        created_at: "2024-01-01T00:00:00Z",
+      },
+    ]);
+    mockedRollbackProduct.mockResolvedValue({
+      product: { id: "product-id" },
+      task: null,
+      snapshot: { id: "snapshot-2", version: 2 },
+    } as never);
+    const user = userEvent.setup();
+
+    render(<ProductsPage />);
+    await screen.findByText("Classic T-Shirt");
+
+    await user.click(screen.getByRole("button", { name: "查看详情" }));
+    expect(await screen.findByText("版本 1")).toBeInTheDocument();
+    expect(screen.getByText("操作者 admin@example.com")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "回滚到此版本" }));
+    await user.click(await screen.findByRole("button", { name: "确认回滚" }));
+
+    await waitFor(() =>
+      expect(mockedRollbackProduct).toHaveBeenCalledWith(
+        "saved-access-token",
+        "product-id",
+        1,
+      ),
+    );
   });
 });

@@ -164,4 +164,20 @@ def test_regenerate_creates_a_new_task_for_the_same_product() -> None:
         assert new_task.product_id == product.id
         assert new_task.status == TaskState.PENDING.value
         assert new_task.risk_level == "medium"
+        assert task.status == TaskState.REJECTED.value
+        assert draft.status == DraftStatus.REJECTED.value
+        assert draft.rejection_reason == RejectionReason.OTHER.value
         assert session.scalar(select(Task)) is not None
+
+
+def test_regenerate_rejects_an_already_published_draft() -> None:
+    engine = make_engine()
+    with TenantSession(
+        bind=engine, expire_on_commit=False, tenant_id=TENANT_ID
+    ) as session:
+        _, task, draft = add_fixtures(session)
+        task.status = TaskState.PUBLISHED.value
+        draft.status = DraftStatus.PUBLISHED.value
+
+        with pytest.raises(DraftNotReviewable):
+            ReviewService(session, "admin@example.com").regenerate(draft.id)
