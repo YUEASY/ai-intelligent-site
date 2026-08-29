@@ -12,13 +12,9 @@ function savedToken(): string | null {
   return sessionStorage.getItem(TOKEN_KEY);
 }
 
-export async function withAuthenticatedSession<T>(
-  operation: (token: string) => Promise<T>,
-): Promise<T> {
-  const token = savedToken();
-  if (!token) throw new ApiError("登录状态已失效，请重新登录", 401);
+async function clearInvalidSession<T>(operation: () => Promise<T>): Promise<T> {
   try {
-    return await operation(token);
+    return await operation();
   } catch (cause) {
     if (cause instanceof ApiError && cause.status === 401) {
       sessionStorage.removeItem(TOKEN_KEY);
@@ -27,15 +23,16 @@ export async function withAuthenticatedSession<T>(
   }
 }
 
+export async function withAuthenticatedSession<T>(
+  operation: (token: string) => Promise<T>,
+): Promise<T> {
+  const token = savedToken();
+  if (!token) throw new ApiError("登录状态已失效，请重新登录", 401);
+  return clearInvalidSession(() => operation(token));
+}
+
 async function resolveAdmin(token: string): Promise<Admin> {
-  try {
-    return await getCurrentAdmin(token);
-  } catch (cause) {
-    if (cause instanceof ApiError && cause.status === 401) {
-      sessionStorage.removeItem(TOKEN_KEY);
-    }
-    throw cause;
-  }
+  return clearInvalidSession(() => getCurrentAdmin(token));
 }
 
 export function hasSavedSession(): boolean {

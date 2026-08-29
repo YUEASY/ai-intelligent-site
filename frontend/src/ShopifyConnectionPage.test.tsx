@@ -172,4 +172,36 @@ describe("ShopifyConnectionPage", () => {
     resolveStores([]);
     expect(await screen.findByText("未连接")).toBeInTheDocument();
   });
+
+  it("keeps an authorization error visible across successful status polls", async () => {
+    let poll: (() => void) | undefined;
+    vi.spyOn(window, "setInterval").mockImplementation(
+      (handler: TimerHandler, timeout?: number) => {
+        if (typeof handler === "function" && timeout === 3000) {
+          poll = handler as () => void;
+        }
+        return 987654;
+      },
+    );
+    vi.spyOn(window, "open").mockReturnValue(null);
+    mockedGetShopifyStores.mockResolvedValue([]);
+    render(<ShopifyConnectionPage />);
+    await act(async () => undefined);
+
+    fireEvent.change(screen.getByPlaceholderText("your-store.myshopify.com"), {
+      target: { value: "merchant.myshopify.com" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "连接 Shopify 店铺" }),
+    );
+    expect(
+      screen.getByText("浏览器阻止了授权窗口，请允许弹窗后重试"),
+    ).toBeInTheDocument();
+
+    await act(async () => poll?.());
+
+    expect(
+      screen.getByText("浏览器阻止了授权窗口，请允许弹窗后重试"),
+    ).toBeInTheDocument();
+  });
 });

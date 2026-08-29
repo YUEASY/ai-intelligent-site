@@ -17,7 +17,8 @@ function errorMessage(cause: unknown, fallback: string): string {
 
 export function useShopifyConnection() {
   const [stores, setStores] = useState<ShopifyStore[]>();
-  const [error, setError] = useState<string>();
+  const [statusError, setStatusError] = useState<string>();
+  const [authorizationError, setAuthorizationError] = useState<string>();
   const [shopDomain, setShopDomain] = useState("");
   const [authorizing, setAuthorizing] = useState(false);
   const sessionExpired = useRef(false);
@@ -33,14 +34,14 @@ export function useShopifyConnection() {
         const currentStores = await withAuthenticatedSession(getShopifyStores);
         if (active) {
           setStores(currentStores);
-          setError(undefined);
+          setStatusError(undefined);
         }
       } catch (cause) {
         if (cause instanceof ApiError && cause.status === 401) {
           sessionExpired.current = true;
         }
         if (active) {
-          setError(errorMessage(cause, "暂时无法获取店铺连接状态"));
+          setStatusError(errorMessage(cause, "暂时无法获取店铺连接状态"));
         }
       } finally {
         refreshPending = false;
@@ -58,18 +59,18 @@ export function useShopifyConnection() {
   const authorize = async () => {
     const normalizedDomain = shopDomain.trim().toLowerCase();
     if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(normalizedDomain)) {
-      setError("请输入有效的 Shopify 店铺域名");
+      setAuthorizationError("请输入有效的 Shopify 店铺域名");
       return;
     }
 
     const popup = window.open("", "shopify-oauth", POPUP_FEATURES);
     if (!popup) {
-      setError("浏览器阻止了授权窗口，请允许弹窗后重试");
+      setAuthorizationError("浏览器阻止了授权窗口，请允许弹窗后重试");
       return;
     }
 
     setAuthorizing(true);
-    setError(undefined);
+    setAuthorizationError(undefined);
     try {
       const { authorization_url: authorizationUrl } =
         await withAuthenticatedSession((token) =>
@@ -81,7 +82,7 @@ export function useShopifyConnection() {
       if (cause instanceof ApiError && cause.status === 401) {
         sessionExpired.current = true;
       }
-      setError(errorMessage(cause, "暂时无法发起 Shopify 授权"));
+      setAuthorizationError(errorMessage(cause, "暂时无法发起 Shopify 授权"));
     } finally {
       setAuthorizing(false);
     }
@@ -90,7 +91,7 @@ export function useShopifyConnection() {
   return {
     authorize,
     authorizing,
-    error,
+    error: authorizationError ?? statusError,
     setShopDomain,
     shopDomain,
     stores,
