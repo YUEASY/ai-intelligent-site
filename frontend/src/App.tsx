@@ -27,13 +27,16 @@ import {
   ApiError,
   type Admin,
   type LoginCredentials,
-  getCurrentAdmin,
-  login,
 } from "./api";
+import {
+  authenticate,
+  clearSession,
+  hasSavedSession,
+  restoreSession,
+} from "./auth";
 
 const { Header, Content, Sider } = Layout;
 const { Text, Title } = Typography;
-const TOKEN_KEY = "ai-site-admin-token";
 
 const navigation = [
   { key: "overview", icon: <AppstoreOutlined />, label: "概览" },
@@ -56,7 +59,7 @@ const pageCopy: Record<string, { eyebrow: string; title: string; body: string }>
   reviews: {
     eyebrow: "HUMAN REVIEW",
     title: "审核",
-    body: "中高风险任务的通过、驳回与人工修改入口将在此呈现。",
+    body: "中风险任务在此人工确认；高风险任务会被策略直接禁止。",
   },
   products: {
     eyebrow: "CANONICAL PRODUCTS",
@@ -73,11 +76,8 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: (admin: Admin) => v
     setSubmitting(true);
     setError(undefined);
     try {
-      const token = await login(credentials);
-      sessionStorage.setItem(TOKEN_KEY, token.access_token);
-      onAuthenticated(await getCurrentAdmin(token.access_token));
+      onAuthenticated(await authenticate(credentials));
     } catch (cause) {
-      sessionStorage.removeItem(TOKEN_KEY);
       setError(
         cause instanceof ApiError && cause.status === 401
           ? "租户、邮箱或密码不正确"
@@ -217,24 +217,36 @@ function AdminShell({ admin, onLogout }: { admin: Admin; onLogout: () => void })
 
 export default function App() {
   const [admin, setAdmin] = useState<Admin>();
-  const [restoring, setRestoring] = useState(() =>
-    Boolean(sessionStorage.getItem(TOKEN_KEY)),
-  );
+  const [restoring, setRestoring] = useState(hasSavedSession);
+  const [restoreFailed, setRestoreFailed] = useState(false);
 
   useEffect(() => {
-    const token = sessionStorage.getItem(TOKEN_KEY);
-    if (!token) {
+    if (!hasSavedSession()) {
       return;
     }
-    getCurrentAdmin(token)
-      .then(setAdmin)
-      .catch(() => sessionStorage.removeItem(TOKEN_KEY))
+    restoreSession()
+      .then((restoredAdmin) => {
+        if (restoredAdmin) setAdmin(restoredAdmin);
+      })
+      .catch(() => setRestoreFailed(true))
       .finally(() => setRestoring(false));
   }, []);
 
   const logout = () => {
-    sessionStorage.removeItem(TOKEN_KEY);
+    clearSession();
     setAdmin(undefined);
+    setRestoreFailed(false);
+  };
+
+  const retryRestore = () => {
+    setRestoring(true);
+    setRestoreFailed(false);
+    restoreSession()
+      .then((restoredAdmin) => {
+        if (restoredAdmin) setAdmin(restoredAdmin);
+      })
+      .catch(() => setRestoreFailed(true))
+      .finally(() => setRestoring(false));
   };
 
   return (
@@ -251,6 +263,16 @@ export default function App() {
     >
       {restoring ? (
         <div className="restore-screen"><Spin size="large" /></div>
+      ) : restoreFailed ? (
+        <div className="restore-screen">
+          <Space direction="vertical" align="center">
+            <Alert showIcon type="warning" message="暂时无法恢复登录状态，会话已为你保留" />
+            <Space>
+              <Button type="primary" onClick={retryRestore}>重试</Button>
+              <Button onClick={logout}>重新登录</Button>
+            </Space>
+          </Space>
+        </div>
       ) : admin ? (
         <AdminShell admin={admin} onLogout={logout} />
       ) : (
