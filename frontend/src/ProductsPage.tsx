@@ -1,7 +1,7 @@
 import { Alert, Button, Card, Drawer, Empty, Space, Spin, Tag, Typography } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ApiError, type Product, getProducts, importProducts } from "./api";
+import { ApiError, type Product, generateProductDraft, getProducts, importProducts } from "./api";
 import { withAuthenticatedSession } from "./auth";
 import "./ProductsPage.css";
 
@@ -20,6 +20,9 @@ export default function ProductsPage({
   const [importing, setImporting] = useState(false);
   const [importNotice, setImportNotice] = useState<string>();
   const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [generatingId, setGeneratingId] = useState<string>();
+  const [generateNotice, setGenerateNotice] = useState<string>();
+  const [generateError, setGenerateError] = useState<string>();
   const csvInput = useRef<HTMLInputElement>(null);
   const imageInput = useRef<HTMLInputElement>(null);
 
@@ -40,6 +43,27 @@ export default function ProductsPage({
   useEffect(() => {
     void Promise.resolve().then(loadProducts);
   }, [loadProducts]);
+
+  const generateFor = async (product: Product) => {
+    setGeneratingId(product.id);
+    setGenerateNotice(undefined);
+    setGenerateError(undefined);
+    try {
+      await withAuthenticatedSession((token) =>
+        generateProductDraft(token, product.id),
+      );
+      setGenerateNotice(`已为 ${product.title} 触发生成任务，草稿生成后进入审核队列`);
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 401) {
+        onSessionExpired?.();
+      }
+      setGenerateError(
+        cause instanceof ApiError ? cause.message : "生成失败，请稍后重试",
+      );
+    } finally {
+      setGeneratingId(undefined);
+    }
+  };
 
   const submitImport = async () => {
     if (!csvFile) return;
@@ -146,6 +170,15 @@ export default function ProductsPage({
       </Card>
 
       {importNotice && <Alert showIcon type="success" message={importNotice} />}
+      {generateNotice && <Alert showIcon type="success" message={generateNotice} />}
+      {generateError && (
+        <Alert
+          showIcon
+          type="error"
+          title="生成失败"
+          description={generateError}
+        />
+      )}
       {importErrors.length > 0 && (
         <Alert
           showIcon
@@ -202,7 +235,16 @@ export default function ProductsPage({
                 <Title level={3}>{product.title}</Title>
                 <Text>{product.sku}</Text>
                 <Text type="secondary">{product.variants.length} 个变体</Text>
-                <Button onClick={() => setSelected(product)}>查看详情</Button>
+                <Space wrap>
+                  <Button onClick={() => setSelected(product)}>查看详情</Button>
+                  <Button
+                    type="primary"
+                    loading={generatingId === product.id}
+                    onClick={() => void generateFor(product)}
+                  >
+                    生成 AI 草稿
+                  </Button>
+                </Space>
               </Space>
             </Card>
           ))}

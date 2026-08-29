@@ -1,0 +1,21 @@
+.review-queue-page {
+  display: grid;
+  gap: 24px;
+  max-width: 860px;
+}
+
+.review-queue-loading,
+.review-queue-empty {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+}
+
+.review-draft-list {
+  display: grid;
+  gap: 16px;
+}
+
+.review-draft-card {
+  box-shadow: 0 16px 38px rgb(28 54 49 / 8%);
+}

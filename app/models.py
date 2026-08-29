@@ -18,6 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base, TenantOwned
+from app.domain.draft import DraftStatus
 from app.domain.product import ProductStatus
 from app.domain.task_state import TaskState
 from app.shopify.types import ShopifyStoreStatus, WebhookEventStatus
@@ -71,6 +72,7 @@ class Task(TenantOwned, Timestamped, Base):
         String(32), default=TaskState.PENDING.value, nullable=False, index=True
     )
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    product_id: Mapped[UUID | None] = mapped_column(nullable=True, index=True)
 
 
 class TaskAuditLog(TenantOwned, Base):
@@ -189,6 +191,50 @@ class ProductImageAsset(TenantOwned, Timestamped, Base):
     content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     product: Mapped[Product] = relationship(back_populates="image_assets")
+
+
+class ProductDraft(TenantOwned, Timestamped, Base):
+    __tablename__ = "product_drafts"
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN {tuple(status.value for status in DraftStatus)!r}",
+            name="ck_product_drafts_status",
+        ),
+        CheckConstraint(
+            "risk_level IN ('low', 'medium', 'high')",
+            name="ck_product_drafts_risk_level",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "product_id"],
+            ["products.tenant_id", "products.id"],
+            ondelete="CASCADE",
+            name="fk_product_drafts_product",
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "task_id"],
+            ["tasks.tenant_id", "tasks.id"],
+            ondelete="CASCADE",
+            name="fk_product_drafts_task",
+        ),
+        UniqueConstraint("tenant_id", "id", name="uq_product_drafts_tenant_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    product_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
+    task_id: Mapped[UUID] = mapped_column(nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    meta_title: Mapped[str] = mapped_column(String(255), nullable=False)
+    meta_description: Mapped[str] = mapped_column(Text, nullable=False)
+    alt_text: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False)
+    seo_tags: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    risk_level: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        default=DraftStatus.PENDING_REVIEW.value,
+        nullable=False,
+        index=True,
+    )
 
 
 class ShopifyStore(TenantOwned, Timestamped, Base):

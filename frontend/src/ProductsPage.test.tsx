@@ -2,13 +2,14 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, getProducts, importProducts } from "./api";
+import { ApiError, generateProductDraft, getProducts, importProducts } from "./api";
 import ProductsPage from "./ProductsPage";
 
 vi.mock("./api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./api")>()),
   getProducts: vi.fn(),
   importProducts: vi.fn(),
+  generateProductDraft: vi.fn(),
 }));
 
 vi.mock("./auth", () => ({
@@ -18,11 +19,13 @@ vi.mock("./auth", () => ({
 
 const mockedGetProducts = vi.mocked(getProducts);
 const mockedImportProducts = vi.mocked(importProducts);
+const mockedGenerateProductDraft = vi.mocked(generateProductDraft);
 
 describe("ProductsPage", () => {
   beforeEach(() => {
     mockedGetProducts.mockReset();
     mockedImportProducts.mockReset();
+    mockedGenerateProductDraft.mockReset();
   });
 
   afterEach(() => {
@@ -260,6 +263,86 @@ describe("ProductsPage", () => {
       [],
     );
     expect(await screen.findByText("Retry Product")).toBeInTheDocument();
+  });
+
+  it("triggers AI draft generation and reports the pending task as a draft", async () => {
+    mockedGetProducts.mockResolvedValue([
+      {
+        id: "product-id",
+        tenant_id: "tenant-id",
+        source: "merchant_csv",
+        source_id: "product-1",
+        sku: "TSHIRT",
+        title: "Classic T-Shirt",
+        description: "Heavy cotton tee",
+        category: "Apparel",
+        tags: ["summer"],
+        images: [],
+        meta_title: "Classic Cotton T-Shirt",
+        meta_description: "Shop our tee",
+        handle: "classic-t-shirt",
+        status: "draft",
+        variants: [],
+      },
+    ]);
+    mockedGenerateProductDraft.mockResolvedValue({
+      id: "task-id",
+      tenant_id: "tenant-id",
+      kind: "product",
+      operation_type: "update",
+      changed_fields: ["title"],
+      risk_level: "medium",
+      status: "pending",
+      last_error: null,
+      product_id: "product-id",
+      created_at: "2024-01-01T00:00:00Z",
+      updated_at: "2024-01-01T00:00:00Z",
+    });
+    const user = userEvent.setup();
+    render(<ProductsPage />);
+    await screen.findByText("Classic T-Shirt");
+
+    await user.click(screen.getByRole("button", { name: "生成 AI 草稿" }));
+
+    expect(mockedGenerateProductDraft).toHaveBeenCalledWith(
+      "saved-access-token",
+      "product-id",
+    );
+    const notice = await screen.findByText(/触发生成任务/);
+    expect(notice.textContent).toContain("草稿");
+    expect(notice.textContent).not.toContain("已发布");
+  });
+
+  it("shows a generation failure without reporting success", async () => {
+    mockedGetProducts.mockResolvedValue([
+      {
+        id: "product-id",
+        tenant_id: "tenant-id",
+        source: "merchant_csv",
+        source_id: "product-1",
+        sku: "TSHIRT",
+        title: "Classic T-Shirt",
+        description: "Heavy cotton tee",
+        category: "Apparel",
+        tags: [],
+        images: [],
+        meta_title: "Classic Cotton T-Shirt",
+        meta_description: "Shop our tee",
+        handle: "classic-t-shirt",
+        status: "draft",
+        variants: [],
+      },
+    ]);
+    mockedGenerateProductDraft.mockRejectedValue(new ApiError("生成服务不可用", 503));
+    const user = userEvent.setup();
+    render(<ProductsPage />);
+    await screen.findByText("Classic T-Shirt");
+
+    await user.click(screen.getByRole("button", { name: "生成 AI 草稿" }));
+
+    expect(await screen.findByText("生成失败")).toBeInTheDocument();
+    expect(screen.getByText("生成服务不可用")).toBeInTheDocument();
+    expect(screen.queryByText(/触发生成任务/)).not.toBeInTheDocument();
   });
 
   it("notifies the shell when the product session has expired", async () => {

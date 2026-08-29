@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.domain.draft import DraftStatus
 from app.domain.product import ProductStatus
 from app.domain.risk import (
     OperationType,
@@ -43,6 +44,7 @@ class TaskCreate(BaseModel):
     kind: TaskKind
     operation_type: OperationType
     changed_fields: set[ProductField] = Field(default_factory=set)
+    product_id: UUID | None = None
 
     @model_validator(mode="after")
     def validate_risk_input(self) -> "TaskCreate":
@@ -61,6 +63,7 @@ class TaskRead(BaseModel):
     risk_level: RiskLevel
     status: TaskState
     last_error: str | None
+    product_id: UUID | None
     created_at: datetime
     updated_at: datetime
 
@@ -118,3 +121,22 @@ class ProductImportRead(BaseModel):
     imported_variants: int
     imported_images: int
     products: list[ProductRead]
+
+
+class DraftRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tenant_id: UUID
+    product_id: UUID
+    task_id: UUID
+    title: str
+    description: str
+    meta_title: str
+    meta_description: str
+    alt_text: dict[str, str]
+    seo_tags: list[str]
+    risk_level: RiskLevel
+    status: DraftStatus
+    created_at: datetime
+    updated_at: datetime

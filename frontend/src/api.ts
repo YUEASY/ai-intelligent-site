@@ -57,6 +57,40 @@ export type ProductImportResult = {
   products: Product[];
 };
 
+export type RiskLevel = "low" | "medium" | "high";
+export type DraftStatus = "pending_review" | "published" | "rejected";
+
+export type ReviewDraft = {
+  id: string;
+  tenant_id: string;
+  product_id: string;
+  task_id: string;
+  title: string;
+  description: string;
+  meta_title: string;
+  meta_description: string;
+  alt_text: Record<string, string>;
+  seo_tags: string[];
+  risk_level: RiskLevel;
+  status: DraftStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Task = {
+  id: string;
+  tenant_id: string;
+  kind: "product" | "seo";
+  operation_type: string;
+  changed_fields: string[];
+  risk_level: RiskLevel;
+  status: string;
+  last_error: string | null;
+  product_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ApiValidationIssue = {
   line: number;
   message: string;
@@ -147,6 +181,21 @@ export async function importProducts(
 
 export async function getShopifyStores(token: string): Promise<ShopifyStore[]> {
   return getAuthenticated<ShopifyStore[]>("/shopify/stores", token);
+}
+
+export async function getReviewQueue(token: string): Promise<ReviewDraft[]> {
+  return getAuthenticated<ReviewDraft[]>("/reviews/queue", token);
+}
+
+export async function generateProductDraft(
+  token: string,
+  productId: string,
+): Promise<Task> {
+  const response = await fetch(`${API_BASE}/products/${productId}/generate`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return parseResponse<Task>(response);
 }
 
 export async function getShopifyAuthorizationUrl(

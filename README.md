@@ -30,6 +30,8 @@ Shopify App 的最小 Scope（`write_products,write_content`）配置在 `shopif
 - `GET /api/v1/tasks/{task_id}/audit-log`：查看每次状态迁移的操作者、时间和前后状态。
 - `POST /api/v1/products/import`：以 multipart 字段 `file` 上传 UTF-8 CSV，并用可重复字段 `images` 上传图片包；归一化并持久化商品、变体与图片，任一非法行都会让整次导入失败并返回行号。
 - `GET /api/v1/products`：列出当前商户的商品标准模型与变体。
+- `POST /api/v1/products/{product_id}/generate`：为商品触发 AI 生成任务（pending → running），用真实商品数据生成英文 Title/详情/SEO 字段并写入草稿；低风险自动推进，中/高风险进入审核队列。
+- `GET /api/v1/reviews/queue`：查看待审核草稿与风险等级，按商户 + 风险（高→低）+ 创建时间排序。
 - `GET /api/v1/products/{product_id}/images/{filename}`：读取当前商户已导入的商品图片。
 - `GET /api/v1/shopify/oauth/authorize?shop_domain=...`：生成仅含商品与内容写权限的 Shopify 授权 URL。
 - `GET /api/v1/shopify/oauth/callback`：Shopify OAuth 回调；Token 仅以 AES-GCM 密文落库。

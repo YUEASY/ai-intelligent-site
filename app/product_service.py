@@ -32,6 +32,10 @@ class ProductImageNotFoundError(LookupError):
     pass
 
 
+class ProductNotFoundError(LookupError):
+    pass
+
+
 class ProductService:
     def __init__(self, session: TenantSession) -> None:
         self._session = session
@@ -190,6 +194,17 @@ class ProductService:
             .order_by(Product.created_at, Product.id)
         )
         return list(self._session.scalars(statement))
+
+    def get(self, product_id: UUID) -> Product:
+        statement = (
+            select(Product)
+            .options(selectinload(Product.variants))
+            .where(Product.id == product_id)
+        )
+        product = self._session.scalar(statement)
+        if product is None:
+            raise ProductNotFoundError(str(product_id))
+        return product
 
     def get_image(self, product_id: UUID, filename: str) -> ProductImageAsset:
         image = self._session.scalar(

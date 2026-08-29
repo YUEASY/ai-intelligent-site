@@ -12,15 +12,26 @@ from fastapi import (
 )
 
 from app.dependencies import RequestContext, get_request_context
+from app.domain.risk import OperationType
+from app.generation.workflow import ALL_CONTENT_FIELDS
 from app.importing.csv_adapter import CsvImportAdapter, CsvImportValidationError
 from app.product_service import (
     ProductImageNotFoundError,
     ProductImageUpload,
     ProductImportConflict,
     ProductImportValidationError,
+    ProductNotFoundError,
     ProductService,
 )
-from app.schemas import ProductImportRead, ProductRead
+from app.schemas import (
+    ProductImportRead,
+    ProductRead,
+    TaskCreate,
+    TaskKind,
+    TaskRead,
+)
+from app.services import TaskService
+from app.worker import execute_task
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -92,6 +103,33 @@ def list_products(
         ProductRead.model_validate(product)
         for product in ProductService(context.session).list_products()
     ]
+
+
+@router.post(
+    "/{product_id}/generate",
+    response_model=TaskRead,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def generate_product_content(
+    product_id: UUID,
+    context: Annotated[RequestContext, Depends(get_request_context)],
+) -> TaskRead:
+    try:
+        ProductService(context.session).get(product_id)
+    except ProductNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND) from exc
+
+    task = TaskService(context.session, actor=context.actor).create(
+        TaskCreate(
+            kind=TaskKind.PRODUCT,
+            operation_type=OperationType.UPDATE,
+            changed_fields=set(ALL_CONTENT_FIELDS),
+            product_id=product_id,
+        )
+    )
+    context.session.commit()
+    execute_task.delay(str(task.id), str(task.tenant_id))
+    return TaskRead.model_validate(task)
 
 
 @router.get("/{product_id}/images/{filename}")

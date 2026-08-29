@@ -4,9 +4,12 @@ from celery import Task as CeleryTask  # type: ignore[import-untyped]
 from sqlalchemy.exc import OperationalError
 
 from app.celery_app import celery_app
-from app.database import tenant_session_scope
+from app.database import TenantSession, tenant_session_scope
 from app.domain.risk import RiskLevel
 from app.domain.task_state import InvalidTaskTransition, TaskState
+from app.generation.service import GenerationService
+from app.generation.workflow import GenerationError
+from app.product_service import ProductNotFoundError
 from app.services import TaskNotFoundError, TaskService, completion_state
 from app.shopify.types import WebhookEventStatus
 from app.shopify.webhook_service import ShopifyWebhookService, WebhookEventNotFound
@@ -20,19 +23,35 @@ class DeterministicTaskError(RuntimeError):
     """A validation or parameter failure that retrying cannot fix."""
 
 
+def run_task_workflow(session: TenantSession, task_id: UUID) -> str:
+    """Advance a task through its workflow, generating content when applicable.
+
+    Generation never writes to the storefront; it only produces a draft.
+    """
+
+    service = TaskService(session, actor="system:celery")
+    task = service.get(task_id, for_update=True)
+    current = TaskState(task.status)
+    if current is TaskState.PENDING:
+        service.advance(task_id, TaskState.RUNNING)
+        session.commit()
+    elif current is not TaskState.RUNNING:
+        return current.value
+
+    if task.product_id is not None:
+        try:
+            GenerationService(session).generate(task)
+        except (GenerationError, ProductNotFoundError) as exc:
+            service.fail(task_id, str(exc))
+            return TaskState.FAILED.value
+
+    target = completion_state(RiskLevel(task.risk_level))
+    return service.advance(task_id, target).status
+
+
 def _run_workflow(task_id: UUID, tenant_id: UUID) -> str:
     with tenant_session_scope(tenant_id) as session:
-        service = TaskService(session, actor="system:celery")
-        task = service.get(task_id, for_update=True)
-        current = TaskState(task.status)
-        if current is TaskState.PENDING:
-            service.advance(task_id, TaskState.RUNNING)
-            session.commit()
-        elif current is not TaskState.RUNNING:
-            return current.value
-
-        target = completion_state(RiskLevel(task.risk_level))
-        return service.advance(task_id, target).status
+        return run_task_workflow(session, task_id)
 
 
 def _mark_failed(task_id: UUID, tenant_id: UUID, error: Exception) -> None:

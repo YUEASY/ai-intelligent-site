@@ -37,6 +37,7 @@ import {
 } from "./auth";
 import ShopifyConnectionPage from "./ShopifyConnectionPage";
 import ProductsPage from "./ProductsPage";
+import ReviewQueuePage from "./ReviewQueuePage";
 
 const { Header, Content, Sider } = Layout;
 const { Text, Title } = Typography;
@@ -205,6 +206,8 @@ function AdminShell({ admin, onLogout }: { admin: Admin; onLogout: () => void })
         <Content className="admin-content">
           {page === "products" ? (
             <ProductsPage onSessionExpired={onLogout} />
+          ) : page === "reviews" ? (
+            <ReviewQueuePage onSessionExpired={onLogout} />
           ) : page === "shopify" ? (
             <ShopifyConnectionPage />
           ) : (

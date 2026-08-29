@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -87,25 +87,25 @@ describe("internal admin authentication", () => {
     expect(sessionStorage.getItem("ai-site-admin-token")).toBeNull();
   });
 
-  it("renders placeholders and opens the product list", async () => {
+  it("renders placeholders and opens the product and review pages", async () => {
     sessionStorage.setItem("ai-site-admin-token", "saved-access-token");
     vi.stubGlobal("fetch", vi.fn<typeof fetch>((input) => {
       const url = input instanceof Request ? input.url : input.toString();
-      return Promise.resolve(
-        jsonResponse(url.endsWith("/products") ? [] : admin),
-      );
+      const isList = url.endsWith("/products") || url.endsWith("/reviews/queue");
+      return Promise.resolve(jsonResponse(isList ? [] : admin));
     }));
     const user = userEvent.setup();
     render(<App />);
     await screen.findByText("运营概览");
 
-    for (const [navigation, placeholder] of [
-      ["任务", "任务模块已就绪"],
-      ["审核", "审核模块已就绪"],
-    ] as const) {
-      await user.click(screen.getByRole("menuitem", { name: navigation }));
-      await waitFor(() => expect(screen.getByText(placeholder)).toBeInTheDocument());
-    }
+    await user.click(screen.getByRole("menuitem", { name: "任务" }));
+    expect(await screen.findByText("任务模块已就绪")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("menuitem", { name: "审核" }));
+    expect(
+      await screen.findByRole("heading", { name: "审核队列" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("暂无待审核草稿")).toBeInTheDocument();
 
     await user.click(screen.getByRole("menuitem", { name: "商品" }));
     expect(
