@@ -12,6 +12,10 @@ function savedToken(): string | null {
   return sessionStorage.getItem(TOKEN_KEY);
 }
 
+export function getSavedAccessToken(): string | null {
+  return savedToken();
+}
+
 async function resolveAdmin(token: string): Promise<Admin> {
   try {
     return await getCurrentAdmin(token);

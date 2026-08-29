@@ -12,6 +12,16 @@ export type Admin = {
   email: string;
 };
 
+export type ShopifyStore = {
+  shop_domain: string;
+  status: "connected" | "disconnected" | "error";
+  granted_scopes: string[];
+};
+
+export type ShopifyAuthorization = {
+  authorization_url: string;
+};
+
 type TokenResponse = {
   access_token: string;
   token_type: "bearer";
@@ -55,3 +65,21 @@ export async function getCurrentAdmin(token: string): Promise<Admin> {
   return parseResponse<Admin>(response);
 }
 
+export async function getShopifyStores(token: string): Promise<ShopifyStore[]> {
+  const response = await fetch(`${API_BASE}/shopify/stores`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return parseResponse<ShopifyStore[]>(response);
+}
+
+export async function getShopifyAuthorizationUrl(
+  token: string,
+  shopDomain: string,
+): Promise<ShopifyAuthorization> {
+  const query = new URLSearchParams({ shop_domain: shopDomain });
+  const response = await fetch(
+    `${API_BASE}/shopify/oauth/authorize?${query.toString()}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  return parseResponse<ShopifyAuthorization>(response);
+}

@@ -3,6 +3,7 @@ import {
   AuditOutlined,
   LogoutOutlined,
   ProductOutlined,
+  ShopOutlined,
   UnorderedListOutlined,
 } from "@ant-design/icons";
 import {
@@ -34,6 +35,7 @@ import {
   hasSavedSession,
   restoreSession,
 } from "./auth";
+import ShopifyConnectionPage from "./ShopifyConnectionPage";
 
 const { Header, Content, Sider } = Layout;
 const { Text, Title } = Typography;
@@ -43,6 +45,7 @@ const navigation = [
   { key: "tasks", icon: <UnorderedListOutlined />, label: "任务" },
   { key: "reviews", icon: <AuditOutlined />, label: "审核" },
   { key: "products", icon: <ProductOutlined />, label: "商品" },
+  { key: "shopify", icon: <ShopOutlined />, label: "店铺连接" },
 ];
 
 const pageCopy: Record<string, { eyebrow: string; title: string; body: string }> = {
@@ -198,17 +201,23 @@ function AdminShell({ admin, onLogout }: { admin: Admin; onLogout: () => void })
         </Header>
 
         <Content className="admin-content">
-          <section className="page-heading">
-            <Text className="page-eyebrow">{copy.eyebrow}</Text>
-            <Title>{copy.title}</Title>
-            <Text>{copy.body}</Text>
-          </section>
+          {page === "shopify" ? (
+            <ShopifyConnectionPage />
+          ) : (
+            <>
+              <section className="page-heading">
+                <Text className="page-eyebrow">{copy.eyebrow}</Text>
+                <Title>{copy.title}</Title>
+                <Text>{copy.body}</Text>
+              </section>
 
-          <Card className="placeholder-card" bordered={false}>
-            <div className="placeholder-icon">{navigation.find((item) => item.key === page)?.icon}</div>
-            <Title level={3}>{copy.title}模块已就绪</Title>
-            <Text type="secondary">当前为项目骨架，占位内容将在后续业务迭代中接入。</Text>
-          </Card>
+              <Card className="placeholder-card" bordered={false}>
+                <div className="placeholder-icon">{navigation.find((item) => item.key === page)?.icon}</div>
+                <Title level={3}>{copy.title}模块已就绪</Title>
+                <Text type="secondary">当前为项目骨架，占位内容将在后续业务迭代中接入。</Text>
+              </Card>
+            </>
+          )}
         </Content>
       </Layout>
     </Layout>
