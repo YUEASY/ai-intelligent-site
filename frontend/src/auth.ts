@@ -12,8 +12,19 @@ function savedToken(): string | null {
   return sessionStorage.getItem(TOKEN_KEY);
 }
 
-export function getSavedAccessToken(): string | null {
-  return savedToken();
+export async function withAuthenticatedSession<T>(
+  operation: (token: string) => Promise<T>,
+): Promise<T> {
+  const token = savedToken();
+  if (!token) throw new ApiError("登录状态已失效，请重新登录", 401);
+  try {
+    return await operation(token);
+  } catch (cause) {
+    if (cause instanceof ApiError && cause.status === 401) {
+      sessionStorage.removeItem(TOKEN_KEY);
+    }
+    throw cause;
+  }
 }
 
 async function resolveAdmin(token: string): Promise<Admin> {

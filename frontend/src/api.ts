@@ -47,6 +47,13 @@ async function parseResponse<T>(response: Response): Promise<T> {
   throw new ApiError(payload?.detail ?? "请求失败，请稍后重试", response.status);
 }
 
+async function getAuthenticated<T>(path: string, token: string): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return parseResponse<T>(response);
+}
+
 export async function login(
   credentials: LoginCredentials,
 ): Promise<TokenResponse> {
@@ -59,17 +66,11 @@ export async function login(
 }
 
 export async function getCurrentAdmin(token: string): Promise<Admin> {
-  const response = await fetch(`${API_BASE}/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  return parseResponse<Admin>(response);
+  return getAuthenticated<Admin>("/auth/me", token);
 }
 
 export async function getShopifyStores(token: string): Promise<ShopifyStore[]> {
-  const response = await fetch(`${API_BASE}/shopify/stores`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  return parseResponse<ShopifyStore[]>(response);
+  return getAuthenticated<ShopifyStore[]>("/shopify/stores", token);
 }
 
 export async function getShopifyAuthorizationUrl(
@@ -77,9 +78,8 @@ export async function getShopifyAuthorizationUrl(
   shopDomain: string,
 ): Promise<ShopifyAuthorization> {
   const query = new URLSearchParams({ shop_domain: shopDomain });
-  const response = await fetch(
-    `${API_BASE}/shopify/oauth/authorize?${query.toString()}`,
-    { headers: { Authorization: `Bearer ${token}` } },
+  return getAuthenticated<ShopifyAuthorization>(
+    `/shopify/oauth/authorize?${query.toString()}`,
+    token,
   );
-  return parseResponse<ShopifyAuthorization>(response);
 }
