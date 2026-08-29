@@ -22,6 +22,46 @@ export type ShopifyAuthorization = {
   authorization_url: string;
 };
 
+export type ProductVariant = {
+  id: string;
+  sku: string;
+  options: Record<string, string>;
+  price: string;
+  cost: string | null;
+  inventory: number;
+  image: string | null;
+};
+
+export type Product = {
+  id: string;
+  tenant_id: string;
+  source: string;
+  source_id: string;
+  sku: string;
+  title: string;
+  description: string;
+  category: string;
+  tags: string[];
+  images: string[];
+  meta_title: string;
+  meta_description: string;
+  handle: string;
+  status: "draft" | "active" | "archived";
+  variants: ProductVariant[];
+};
+
+export type ProductImportResult = {
+  imported_products: number;
+  imported_variants: number;
+  imported_images: number;
+  products: Product[];
+};
+
+export type ApiValidationIssue = {
+  line: number;
+  message: string;
+};
+
 type TokenResponse = {
   access_token: string;
   token_type: "bearer";
@@ -31,6 +71,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly validationIssues: ApiValidationIssue[] = [],
   ) {
     super(message);
   }
@@ -42,9 +83,24 @@ async function parseResponse<T>(response: Response): Promise<T> {
   }
 
   const payload = (await response.json().catch(() => null)) as {
-    detail?: string;
+    detail?: unknown;
   } | null;
-  throw new ApiError(payload?.detail ?? "请求失败，请稍后重试", response.status);
+  const validationIssues = Array.isArray(payload?.detail)
+    ? payload.detail.filter(
+        (issue): issue is ApiValidationIssue =>
+          typeof issue === "object" &&
+          issue !== null &&
+          typeof (issue as ApiValidationIssue).line === "number" &&
+          typeof (issue as ApiValidationIssue).message === "string",
+      )
+    : [];
+  const message =
+    typeof payload?.detail === "string"
+      ? payload.detail
+      : validationIssues.length
+        ? "请求内容校验失败"
+        : "请求失败，请稍后重试";
+  throw new ApiError(message, response.status, validationIssues);
 }
 
 async function getAuthenticated<T>(path: string, token: string): Promise<T> {
@@ -67,6 +123,26 @@ export async function login(
 
 export async function getCurrentAdmin(token: string): Promise<Admin> {
   return getAuthenticated<Admin>("/auth/me", token);
+}
+
+export async function getProducts(token: string): Promise<Product[]> {
+  return getAuthenticated<Product[]>("/products", token);
+}
+
+export async function importProducts(
+  token: string,
+  csvFile: File,
+  images: File[],
+): Promise<ProductImportResult> {
+  const body = new FormData();
+  body.append("file", csvFile);
+  images.forEach((image) => body.append("images", image));
+  const response = await fetch(`${API_BASE}/products/import`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body,
+  });
+  return parseResponse<ProductImportResult>(response);
 }
 
 export async function getShopifyStores(token: string): Promise<ShopifyStore[]> {

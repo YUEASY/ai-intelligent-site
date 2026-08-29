@@ -36,6 +36,7 @@ import {
   restoreSession,
 } from "./auth";
 import ShopifyConnectionPage from "./ShopifyConnectionPage";
+import ProductsPage from "./ProductsPage";
 
 const { Header, Content, Sider } = Layout;
 const { Text, Title } = Typography;
@@ -201,7 +202,9 @@ function AdminShell({ admin, onLogout }: { admin: Admin; onLogout: () => void })
         </Header>
 
         <Content className="admin-content">
-          {page === "shopify" ? (
+          {page === "products" ? (
+            <ProductsPage onSessionExpired={onLogout} />
+          ) : page === "shopify" ? (
             <ShopifyConnectionPage />
           ) : (
             <>

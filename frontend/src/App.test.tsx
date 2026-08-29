@@ -87,12 +87,14 @@ describe("internal admin authentication", () => {
     expect(sessionStorage.getItem("ai-site-admin-token")).toBeNull();
   });
 
-  it("renders and switches between task, review, and product placeholders", async () => {
+  it("renders placeholders and opens the product list", async () => {
     sessionStorage.setItem("ai-site-admin-token", "saved-access-token");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(admin)),
-    );
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>((input) => {
+      const url = input instanceof Request ? input.url : input.toString();
+      return Promise.resolve(
+        jsonResponse(url.endsWith("/products") ? [] : admin),
+      );
+    }));
     const user = userEvent.setup();
     render(<App />);
     await screen.findByText("运营概览");
@@ -100,10 +102,15 @@ describe("internal admin authentication", () => {
     for (const [navigation, placeholder] of [
       ["任务", "任务模块已就绪"],
       ["审核", "审核模块已就绪"],
-      ["商品", "商品模块已就绪"],
     ] as const) {
       await user.click(screen.getByRole("menuitem", { name: navigation }));
       await waitFor(() => expect(screen.getByText(placeholder)).toBeInTheDocument());
     }
+
+    await user.click(screen.getByRole("menuitem", { name: "商品" }));
+    expect(
+      await screen.findByRole("heading", { name: "商品列表" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("尚未导入商品")).toBeInTheDocument();
   });
 });
